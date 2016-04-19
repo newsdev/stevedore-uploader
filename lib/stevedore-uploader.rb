@@ -147,15 +147,15 @@ module Stevedore
       }) # was "rescue nil" but that obscured meaningful errors
     end
 
-    def bulk_upload_to_es!(data)
+    def bulk_upload_to_es!(data, type)
       return nil if data.empty?
       begin
-        resp = @client.bulk body: data.map{|datum| {index: {_index: @es_index, _type: 'doc', data: datum }} }
+        resp = @client.bulk body: data.map{|datum| {index: {_index: @es_index, _type: type || 'doc', data: datum }} }
         puts resp if resp[:errors]
       rescue JSON::GeneratorError
         data.each do |datum|
           begin
-            @client.bulk body: [datum].map{|datum| {index: {_index: @es_index, _type: 'doc', data: datum }} }
+            @client.bulk body: [datum].map{|datum| {index: {_index: @es_index, _type: type || 'doc', data: datum }} }
           rescue JSON::GeneratorError
             next
           end
