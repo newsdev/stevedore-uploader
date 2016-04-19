@@ -24,9 +24,14 @@ if __FILE__ == $0
     end
 
     opts.on("-sPATH", "--s3path=PATH",
-            "The path under the int-data-dumps bucket where these files will be uploaded. (defaults to ES index)"
+            "The path under your bucket where these files have been uploaded. (defaults to ES index)"
       ) do |s3path|
       options.s3path = s3path
+    end
+    opts.on("-bPATH", "--s3bucket=PATH",
+            "The s3 bucket where these files have already been be uploaded (or will be later)."
+      ) do |s3bucket|
+      options.s3bucket = s3bucket
     end
 
     opts.on("--title_column=COLNAME",
@@ -75,7 +80,7 @@ ES_INDEX =  if options.index.nil? || options.index == ''
               options.index
             end
 
-S3_BUCKET = FOLDER.downcase.include?('s3://') ? FOLDER.gsub(/s3:\/\//i, '').split("/", 2).first : 'int-data-dumps'
+S3_BUCKET = FOLDER.downcase.include?('s3://') ? FOLDER.gsub(/s3:\/\//i, '').split("/", 2).first : options.s3bucket
 raise ArgumentError, 's3 buckets other than int-data-dumps aren\'t supported by the frontend yet' if S3_BUCKET != 'int-data-dumps'
 ES_HOST = options.host || "localhost:9200"
 S3_PATH = options.s3path  || options.index
