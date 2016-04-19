@@ -81,7 +81,6 @@ ES_HOST = options.host || "localhost:9200"
 S3_PATH = options.s3path  || options.index
 S3_BASEPATH = "https://#{S3_BUCKET}.s3.amazonaws.com/#{S3_PATH}"
 
-
 raise ArgumentError, "specify a destination" unless FOLDER
 raise ArgumentError, "specify the elasticsearch host" unless ES_HOST
 
@@ -99,8 +98,9 @@ if __FILE__ == $0
   else
     f.do!(FOLDER)
   end
-  puts "Finished at #{Time.now}"
-  puts "Uploaded to #{ES_INDEX}; go check out https://stevedore.newsdev.net/search/#{ES_INDEX} or http://stevedore.adm.prd.newsdev.nytimes.com/search/#{ES_INDEX}"  
+  puts "Finished uploading documents at #{Time.now}"
+
+  puts "Created Stevedore for #{ES_INDEX}; go check out https://stevedore.newsdev.net/search/#{ES_INDEX} or http://stevedore.adm.prd.newsdev.nytimes.com/search/#{ES_INDEX}"  
   if f.errors.size > 0  
     STDERR.puts "#{f.errors.size} failed documents:"
     STDERR.puts f.errors.inspect 
