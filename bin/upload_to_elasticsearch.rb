@@ -45,7 +45,7 @@ if __FILE__ == $0
       options.text_column = text_column
     end
 
-    opts.on("-o", "--[no-]ocr", "Run verbosely") do |v|
+    opts.on("-o", "--[no-]ocr", "don't attempt to OCR any PDFs, even if they contain no text") do |v|
       options.ocr = v 
     end
 

@@ -15,4 +15,8 @@ Gem::Specification.new do |s|
   s.add_dependency("aws-sdk", "~> 2")  
   s.add_dependency("rika-stevedore", ">= 1.6.1")  
   s.add_dependency("nokogiri", "~> 1.6")
+  s.add_dependency("ruby-msg", "~> 1.5.2")
+  s.add_dependency("mail", "~> 2.6")
+  s.add_dependency("rubyzip", "~> 1.2")
+
 end

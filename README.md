@@ -5,7 +5,7 @@ A tool for uploading documents into [Stevedore](https://github.com/newsdev/steve
 
 Stevedore is essentially an ElasticSearch endpoint with a customizable frontend attached to it. Stevedore's primary document store is ElasticSearch, so `stevedore-uploader`'s primary task is merely uploading documents to ElasticSearch, with a few attributes that Stevedore depends on. Getting a new document set ready for search requires a few steps, but this tool helps with the hardest one: Converting the documents you want to search into a format that ElasticSearch understands. Customizing the search interface is often not necessary, but if it is, information on how to do that is in the [Stevedore](https://github.com/newsdev/stevedore) repository.
 
-Every document processing job is different. Some might require OCR, others might require parsing e-mails, still others might call for sophisticated processing of text documents. There's no telling. That being the case, this project tries to make no assumptions about the type of data you'll be uploading -- but by default tries to convert everything into plaintext with [Apache Tika](https://tika.apache.org/). A `case` statement in `bin/upload_to_elasticsearch.rb` distinguishes between a few default types, like emails and text blobs, (and PRs would be appreciated adding new ones); for specialized types, the `do` function takes a block allowing you to modify the documents with just a few lines of Ruby.
+Every document processing job is different. Some might require OCR, others might require parsing e-mails, still others might call for sophisticated processing of text documents. There's no telling. That being the case, this project tries to make no assumptions about the type of data you'll be uploading -- but by default tries to convert everything into plaintext with [Apache Tika](https://tika.apache.org/). Stevedore distinguishes between a few default types, like emails and text blobs, (and PRs would be appreciated adding new ones); for specialized types, the `do` function takes a block allowing you to modify the documents with just a few lines of Ruby.
 
 For more details on the entire workflow, see [Stevedore](https://github.com/newsdev/stevedore)
 
@@ -47,14 +47,14 @@ bundle exec ruby bin/upload_to_elasticsearch.rb --index=jrubytest --host=https:/
 if you choose to process documents from S3, you should upload those documents using your choice of tool -- but `awscli` is a good choice. *Stevedore-Uploader does NOT upload documents to S3 on your behalf.
 
 If you need to process documents in a specialized, customized way, follow this example:
-
+````
 uploader = Stevedore::ESUploader.new(ES_HOST, ES_INDEX, S3_BUCKET, S3_PATH_PREFIX) # S3_BUCKET, S3_PATH_PREFIX are optional
 uploader.do! FOLDER do |doc, filename, content, metadata|
   next if doc.nil?
   doc["analyzed"]["metadata"]["date"] = Date.parse(File.basename(filename).split("_")[-2])
   doc["analyzed"]["metadata"]["title"] = my_title_getter_function(File.basename(filename))
 end
-
+````
 
 Questions?
 ==========
