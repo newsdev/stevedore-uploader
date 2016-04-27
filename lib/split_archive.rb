@@ -1,15 +1,16 @@
-# splits zip, mbox and pst files into their constituent documents -- mesages and attachments
+# splits zip, mbox (and eventually pst) files into their constituent documents -- mesages and attachments
 # and puts them into a tmp folder
 # which is then parsed normally
 require 'mapi/msg'
 require 'tmpdir'
-require 'mapi/pst'
 require 'mail'
 require 'zip'
 
 # splits PST and Mbox formats
 module Stevedore
   class ArchiveSplitter
+    HANDLED_FORMATS = ["zip", "mbox"] # "pst", eventually
+
     def self.split(archive_filename)
       # if it's a PST use split_pst
       # if it's an mbox, use split_pst
@@ -41,16 +42,34 @@ module Stevedore
     end
 
     def self.split_pst(archive_filename)
-      pst = Mapi::Pst.new open(archive_filename)
-      Enumerator.new do |yielder|
-        pst.each_with_index do |mail, idx|
-          msg = Mapi::Msg.load mail
-          yielder << ["#{idx}.eml", lambda{|fn| open(fn, 'wb'){|fh| fh << mail } }]
-          msg.attachments.each do |attachment|
-            yielder << [attachment.filename, lambda{|fn| open(fn, 'wb'){|fh| attachment.save fh }}]
-          end
-        end
+      begin 
+        `readpst -V` 
+      rescue 
+        puts "you need to install libpst to split PST files"
+        return []
       end
+      []
+      # TODO: should run this
+      # mkdir emls
+      # mkdir emls-extra
+      # readpst -S -o emls "$pst"             # generates separate attachments.
+      # readpst -e -o emls-extra "$pst"       # generates .emls, with embedded attachments.
+      #                                       #   but also emails in a dumb format, with names like `1` or `2` (no extension)
+      # find . -type f ! -name "*.*" -delete  # remove files with no extension (that is, delete emails)
+      # cp -R emls-extra/ emls
+      # rm -r emls-extra
+
+      # doesn't actually work, giving up on mapi/pst  
+      # pst = Mapi::Pst.new open(archive_filename)
+      # Enumerator.new do |yielder|
+      #   pst.each_with_index do |mail, idx|
+      #     msg = Mapi::Msg.load mail
+      #     yielder << ["#{idx}.eml", lambda{|fn| open(fn, 'wb'){|fh| fh << mail } }]
+      #     msg.attachments.each do |attachment|
+      #       yielder << [attachment.filename, lambda{|fn| open(fn, 'wb'){|fh| attachment.save fh }}]
+      #     end
+      #   end
+      # end
     end
 
     def self.split_mbox(archive_filename)

@@ -81,7 +81,6 @@ ES_INDEX =  if options.index.nil? || options.index == ''
             end
 
 S3_BUCKET = FOLDER.downcase.include?('s3://') ? FOLDER.gsub(/s3:\/\//i, '').split("/", 2).first : options.s3bucket
-raise ArgumentError, 's3 buckets other than int-data-dumps aren\'t supported by the frontend yet' if S3_BUCKET != 'int-data-dumps'
 ES_HOST = options.host || "localhost:9200"
 S3_PATH = options.s3path  || options.index
 S3_BASEPATH = "https://#{S3_BUCKET}.s3.amazonaws.com/#{S3_PATH}"

@@ -196,14 +196,14 @@ module Stevedore
       end
     end
 
-    def do!(target_folder_path, output_stream=STDOUT)
-      output_stream.puts "Processing documents from #{target_folder_path}"
+    def do!(target_path, output_stream=STDOUT)
+      output_stream.puts "Processing documents from #{target_path}"
 
       docs_so_far = 0
       use_s3 = false # option to set this (an option to set document URLs to be relative to the search engine root) is TK
-      @s3_bucket =  target_folder_path.gsub(/s3:\/\//i, '').split("/", 2).first if @s3_bucket.nil? && target_folder_path.downcase.include?('s3://')
+      @s3_bucket =  target_path.gsub(/s3:\/\//i, '').split("/", 2).first if @s3_bucket.nil? && target_path.downcase.include?('s3://')
 
-      if target_folder_path.downcase.include?("s3://")
+      if target_path.downcase.include?("s3://")
         Dir.mktmpdir do |dir|
           Aws.config.update({
             region: 'us-east-1', # TODO should be configurable
@@ -211,7 +211,7 @@ module Stevedore
           s3 = Aws::S3::Resource.new
 
           bucket = s3.bucket(@s3_bucket)
-          s3_path_without_bucket = target_folder_path.gsub(/s3:\/\//i, '').split("/", 2).last
+          s3_path_without_bucket = target_path.gsub(/s3:\/\//i, '').split("/", 2).last
           bucket.objects(:prefix => s3_path_without_bucket).each_slice(@slice_size) do |slice_of_objs|
             docs_so_far += slice_of_objs.size
 
@@ -235,7 +235,7 @@ module Stevedore
               # emails in mailboxes are split into an email and attachments
               # but, for now, standalone emails are treated as one document
               # PDFs can (theoretically) contain documents as "attachments" -- those aren't handled here either.x
-              if ["zip", "mbox", "pst"].include?(tmp_filename.split(".")[-1]) 
+              if ArchiveSplitter::HANDLED_FORMATS.include?(tmp_filename.split(".")[-1]) 
                 ArchiveSplitter.split(tmp_filename).map do |constituent_file, constituent_basename|
                   doc, content, metadata = process_document(constituent_file, download_filename)
                   doc["sha1"] = Digest::SHA1.hexdigest(download_filename + File.basename(constituent_basename)) # since these files all share a download URL (that of the archive, we need to come up with a custom sha1)
@@ -252,7 +252,7 @@ module Stevedore
             end
             begin
               resp = bulk_upload_to_es!(slice_of_objs.compact.flatten(1)) # flatten, in case there's an archive
-              puts resp.inspect if resp["errors"]
+              puts resp.inspect if resp && resp["errors"]
             rescue Manticore::Timeout, Manticore::SocketException
               output_stream.puts("retrying at #{Time.now}")
               retry
@@ -262,13 +262,14 @@ module Stevedore
           end
         end
       else
-        Dir[File.join(target_folder_path, target_folder_path.include?('*') ? '' : '**/*')].each_slice(@slice_size) do |slice_of_files|
+        list_of_files = File.file?(target_path) ? [target_path] : Dir[File.join(target_path, target_path.include?('*') ? '' : '**/*')]
+        list_of_files.each_slice(@slice_size) do |slice_of_files|
           output_stream.puts "starting a set of #{@slice_size}"
           docs_so_far += slice_of_files.size
 
           slice_of_files.map! do |filename|
             next unless File.file?(filename)
-            filename_basepath = filename.gsub(target_folder_path, '')
+            filename_basepath = filename.gsub(target_path, '')
             if use_s3
               download_filename = @s3_basepath + filename_basepath
             else
@@ -280,7 +281,7 @@ module Stevedore
             # emails in mailboxes are split into an email and attachments
             # but, for now, standalone emails are treated as one document
             # PDFs can (theoretically) contain documents as "attachments" -- those aren't handled here either.
-            if ["zip", "mbox", "pst"].include?(filename.split(".")[-1]) 
+            if ArchiveSplitter::HANDLED_FORMATS.include?(filename.split(".")[-1]) 
               ArchiveSplitter.split(filename).map do |constituent_file, constituent_basename|
                 doc, content, metadata = process_document(constituent_file, download_filename)
                 doc["sha1"] = Digest::SHA1.hexdigest(download_filename + File.basename(constituent_basename)) # since these files all share a download URL (that of the archive, we need to come up with a custom sha1)
@@ -296,7 +297,7 @@ module Stevedore
           end
           begin
             resp = bulk_upload_to_es!(slice_of_files.compact.flatten(1)) # flatten, in case there's an archive
-            puts resp.inspect if resp["errors"]
+            puts resp.inspect if resp && resp["errors"]
           rescue Manticore::Timeout, Manticore::SocketException => e
             output_stream.puts e.inspect
             output_stream.puts "Upload error: #{e} #{e.message}."
