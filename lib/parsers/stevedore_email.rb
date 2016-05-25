@@ -15,7 +15,7 @@ module Stevedore
       t.message_to = metadata["Message-To"]
       t.message_from = metadata["Message-From"]
       t.message_cc = metadata["Message-Cc"]
-      t.subject = metadata["subject"]
+      t.title = t.subject = metadata["subject"]
       t.attachments = metadata["X-Attachments"].to_s.split("|").map do |raw_attachment_filename| 
         attachment_filename = CGI::unescape(raw_attachment_filename)
         possible_filename = File.join(File.dirname(filepath), attachment_filename)

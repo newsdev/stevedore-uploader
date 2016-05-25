@@ -1,19 +1,21 @@
 # splits zip, mbox (and eventually pst) files into their constituent documents -- mesages and attachments
 # and puts them into a tmp folder
 # which is then parsed normally
-require 'mapi/msg'
+
 require 'tmpdir'
 require 'mail'
 require 'zip'
+require 'pst' # for PST files
+
 
 # splits PST and Mbox formats
 module Stevedore
   class ArchiveSplitter
-    HANDLED_FORMATS = ["zip", "mbox"] # "pst", eventually
+    HANDLED_FORMATS = ["zip", "mbox", "pst"]
 
     def self.split(archive_filename)
       # if it's a PST use split_pst
-      # if it's an mbox, use split_pst
+      # if it's an mbox, use split_mbox, etc.
       # return a list of files
       Enumerator.new do |yielder|
         Dir.mktmpdir do |tmpdir|
@@ -33,7 +35,7 @@ module Stevedore
 
           constituent_files.each_with_index do |basename_contents_lambda, idx|
             basename, contents_lambda = *basename_contents_lambda
-            tmp_filename = File.join(tmpdir, File.basename(archive_filename), basename )
+            tmp_filename = File.join(tmpdir, File.basename(archive_filename), basename.gsub("/", "") )
             contents_lambda.call(tmp_filename)
             yielder.yield tmp_filename, File.join(File.basename(archive_filename), basename)
           end
@@ -42,34 +44,29 @@ module Stevedore
     end
 
     def self.split_pst(archive_filename)
-      begin 
-        `readpst -V` 
-      rescue 
-        puts "you need to install libpst to split PST files"
-        return []
+      pstfile = Java::ComPFF::PSTFile.new(archive_filename)
+      idx = 0
+      folders = pstfile.root.sub_folders.inject({}) do |memo,f|
+        memo[f.name] = f
+        memo
       end
-      []
-      # TODO: should run this
-      # mkdir emls
-      # mkdir emls-extra
-      # readpst -S -o emls "$pst"             # generates separate attachments.
-      # readpst -e -o emls-extra "$pst"       # generates .emls, with embedded attachments.
-      #                                       #   but also emails in a dumb format, with names like `1` or `2` (no extension)
-      # find . -type f ! -name "*.*" -delete  # remove files with no extension (that is, delete emails)
-      # cp -R emls-extra/ emls
-      # rm -r emls-extra
+      Enumerator.new do |yielder|
+        folders.each do |folder_name, folder|
+          while mail = folder.getNextChild
 
-      # doesn't actually work, giving up on mapi/pst  
-      # pst = Mapi::Pst.new open(archive_filename)
-      # Enumerator.new do |yielder|
-      #   pst.each_with_index do |mail, idx|
-      #     msg = Mapi::Msg.load mail
-      #     yielder << ["#{idx}.eml", lambda{|fn| open(fn, 'wb'){|fh| fh << mail } }]
-      #     msg.attachments.each do |attachment|
-      #       yielder << [attachment.filename, lambda{|fn| open(fn, 'wb'){|fh| attachment.save fh }}]
-      #     end
-      #   end
-      # end
+            eml_str = mail.get_transport_message_headers + mail.get_body
+
+            yielder << ["#{idx}.eml", lambda{|fn| open(fn, 'wb'){|fh| fh << eml_str } }]
+            attachment_count = mail.get_number_of_attachments
+            attachment_count.times do |attachment_idx|
+              attachment = mail.get_attachment(attachment_idx)
+              attachment_filename = attachment.get_filename
+              yielder << ["#{idx}-#{attachment_filename}", lambda {|fn| open(fn, 'wb'){ |fh| fh << attachment.get_file_input_stream.to_io.read }}]
+            end
+            idx += 1
+          end
+        end
+      end
     end
 
     def self.split_mbox(archive_filename)

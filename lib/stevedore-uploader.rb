@@ -200,7 +200,7 @@ module Stevedore
       output_stream.puts "Processing documents from #{target_path}"
 
       docs_so_far = 0
-      use_s3 = false # option to set this (an option to set document URLs to be relative to the search engine root) is TK
+      # use_s3 = false # option to set this (an option to set document URLs to be relative to the search engine root) is TK
       @s3_bucket =  target_path.gsub(/s3:\/\//i, '').split("/", 2).first if @s3_bucket.nil? && target_path.downcase.include?('s3://')
 
       if target_path.downcase.include?("s3://")
@@ -270,11 +270,11 @@ module Stevedore
           slice_of_files.map! do |filename|
             next unless File.file?(filename)
             filename_basepath = filename.gsub(target_path, '')
-            if use_s3
+            # if use_s3  # turning this on TK
               download_filename = @s3_basepath + filename_basepath
-            else
-              download_filename = "/files/#{@es_index}/#{filename_basepath}"
-            end
+            # else
+            #   download_filename = "/files/#{@es_index}/#{filename_basepath}"
+            # end
 
             # is this file an archive that contains a bunch of documents we should index separately?
             # obviously, there is not a strict definition here.
