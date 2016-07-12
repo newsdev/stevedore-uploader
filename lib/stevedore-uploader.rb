@@ -169,7 +169,7 @@ module Stevedore
       end
     end
 
-    def do_csv!(file, download_url, title_column=0, text_column=nil)
+    def do_csv!(file, download_url, title_column=0, text_column=nil, type=nil)
       docs_so_far = 0
       CSV.open(file, headers: (!title_column.is_a? Fixnum ) ).each_slice(@slice_size).each_with_index do |slice, slice_index|
         slice_of_rows = slice.map.each_with_index do |row, i|
@@ -185,7 +185,7 @@ module Stevedore
           doc
         end
         begin
-          resp = bulk_upload_to_es!(slice_of_rows.compact)
+          resp = bulk_upload_to_es!(slice_of_rows.compact.reject(&:empty?), type)
           docs_so_far += @slice_size
         rescue Manticore::Timeout, Manticore::SocketException
           STDERR.puts("retrying at #{Time.now}")
@@ -200,7 +200,7 @@ module Stevedore
       output_stream.puts "Processing documents from #{target_path}"
 
       docs_so_far = 0
-      # use_s3 = false # option to set this (an option to set document URLs to be relative to the search engine root) is TK
+      use_s3 = false # option to set this (an option to set document URLs to be relative to the search engine root) is TK
       @s3_bucket =  target_path.gsub(/s3:\/\//i, '').split("/", 2).first if @s3_bucket.nil? && target_path.downcase.include?('s3://')
 
       if target_path.downcase.include?("s3://")
@@ -251,7 +251,7 @@ module Stevedore
               end
             end
             begin
-              resp = bulk_upload_to_es!(slice_of_objs.compact.flatten(1)) # flatten, in case there's an archive
+              resp = bulk_upload_to_es!(slice_of_objs.compact.flatten(1).reject(&:empty?)) ) # flatten, in case there's an archive
               puts resp.inspect if resp && resp["errors"]
             rescue Manticore::Timeout, Manticore::SocketException
               output_stream.puts("retrying at #{Time.now}")
@@ -262,7 +262,7 @@ module Stevedore
           end
         end
       else
-        list_of_files = File.file?(target_path) ? [target_path] : Dir[File.join(target_path, target_path.include?('*') ? '' : '**/*')]
+        list_of_files = File.file?(target_path) ? [target_path] : Dir[target_path.include?('*') ? target_path : File.join(target_path, '**/*')]
         list_of_files.each_slice(@slice_size) do |slice_of_files|
           output_stream.puts "starting a set of #{@slice_size}"
           docs_so_far += slice_of_files.size

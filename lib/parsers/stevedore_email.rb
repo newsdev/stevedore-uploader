@@ -1,5 +1,5 @@
 require_relative './stevedore_blob'
-require 'CGI'
+require 'cgi'
 require 'digest/sha1'
 require 'manticore'
 module Stevedore
