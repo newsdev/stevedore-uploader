@@ -19,8 +19,23 @@ This project is in JRuby, so we can leverage the transformative enterprise stabi
 2. be sure you're running Java 8. (java 7 is deprecated, c'mon c'mon)
 3. `bundle install`
 
-Usage
------
+Command-Line Options
+--------------------
+````
+Usage: upload_to_elasticsearch [options] target_(dir_or_csv)
+    -h, --host=SERVER:PORT           The location of the ElasticSearch server
+    -i, --index=NAME                 A name to use for the ES index (defaults to using the directory name)
+    -s, --s3path=PATH                The path under your bucket where these files have been uploaded. (defaults to ES index)
+    -b, --s3bucket=PATH              The s3 bucket where these files have already been be uploaded (or will be later).
+        --title_column=COLNAME       If target file is a CSV, which column contains the title of the row. Integer index or string column name.
+        --text_column=COLNAME        If target file is a CSV, which column contains the main, searchable of the row. Integer index or string column name.
+    -o, --[no-]ocr                   don't attempt to OCR any PDFs, even if they contain no text
+    -?, --help                       Display this screen
+````
+
+
+Advanced Usage
+--------------
 
 **This is a piece of a larger upload workflow, [described here](https://github.com/newsdev/stevedore/blob/master/README.md). You should read that first, then come back here.**
 
@@ -37,12 +52,12 @@ if host isn't specified, we assume `localhost:9200`.
 
 e.g. 
 ```
-bundle exec ruby bin/upload_to_elasticsearch.rb --index=jrubytest --host=https://stevedore.newsdev.net/es/ ~/code/marco-rubios-emails/emls/ 
+bundle exec ruby bin/upload_to_elasticsearch.rb --index=jrubytest --host=https://stevedore.elasticsearch.yourdomain.net/es/ ~/code/marco-rubios-emails/emls/ 
 ```
 
 you may also specify an S3 location of documents to parse, instead of a local directory, e.g.
 ```
-bundle exec ruby bin/upload_to_elasticsearch.rb --index=jrubytest --host=https://stevedore.newsdev.net/es/ s3://int-data-dumps/marco-rubio-fire-drill
+bundle exec ruby bin/upload_to_elasticsearch.rb --index=jrubytest --host=https://stevedore.elasticsearch.yourdomain.net/es/ s3://int-data-dumps/marco-rubio-fire-drill
 ```
 if you choose to process documents from S3, you should upload those documents using your choice of tool -- but `awscli` is a good choice. *Stevedore-Uploader does NOT upload documents to S3 on your behalf.
 
