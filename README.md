@@ -55,7 +55,7 @@ e.g.
 bundle exec ruby bin/upload_to_elasticsearch.rb --index=jrubytest --host=https://stevedore.elasticsearch.yourdomain.net/es/ ~/code/marco-rubios-emails/emls/ 
 ```
 
-you may also specify an S3 location of documents to parse, instead of a local directory, e.g.
+you may also specify an s3:// location of documents to parse, instead of a local directory, e.g.
 ```
 bundle exec ruby bin/upload_to_elasticsearch.rb --index=jrubytest --host=https://stevedore.elasticsearch.yourdomain.net/es/ s3://int-data-dumps/marco-rubio-fire-drill
 ```

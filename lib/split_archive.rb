@@ -1,4 +1,4 @@
-# splits zip, mbox (and eventually pst) files into their constituent documents -- mesages and attachments
+# splits zip, mbox, pst files into their constituent documents -- messages and attachments
 # and puts them into a tmp folder
 # which is then parsed normally
 
@@ -11,7 +11,7 @@ require 'pst' # for PST files
 # splits PST and Mbox formats
 module Stevedore
   class ArchiveSplitter
-    HANDLED_FORMATS = ["zip", "mbox", "pst"]
+    HANDLED_FORMATS = ["zip", "mbox", "pst", "eml"]
 
     def self.split(archive_filename)
       # if it's a PST use split_pst
@@ -28,6 +28,8 @@ module Stevedore
                           self.split_pst(archive_filename)
                         elsif extension == "zip"
                           self.split_zip(archive_filename)
+                        elsif extension == "eml"
+                          self.get_attachments_from_eml(archive_filename)                                                    
                         end
           # should yield a relative filename
           # and a lambda that will write the file contents to the given filename
@@ -36,8 +38,14 @@ module Stevedore
           constituent_files.each_with_index do |basename_contents_lambda, idx|
             basename, contents_lambda = *basename_contents_lambda
             tmp_filename = File.join(tmpdir, File.basename(archive_filename), basename.gsub("/", "") )
-            contents_lambda.call(tmp_filename)
-            yielder.yield tmp_filename, File.join(File.basename(archive_filename), basename)
+            FileUtils.mkdir_p(File.dirname(tmp_filename))
+            begin
+              contents_lambda.call(tmp_filename)
+            rescue Errno::ENOENT
+              puts "#{tmp_filename} wasn't extracted from #{archive_filename}" 
+              next
+            end
+            yielder.yield tmp_filename, File.join(File.basename(archive_filename), basename)             
           end
         end
       end
@@ -83,18 +91,33 @@ module Stevedore
             yielder << ["#{idx}.eml", lambda{|fn| open(fn, 'wb'){|fh| fh << mail_str.join("") } }]
             mail = Mail.new mail_str.join("")
             mail.attachments.each do |attachment|
-              yielder << [attachment.filename, lambda{|fn| open(fn, 'wb'){|fh| attachment.save fh }}]
+              yielder << [attachment.filename, lambda{|fn| open(fn, 'wb'){|fh| fh << attachment.body.decoded }}]
             end
           end
         end
       end
     end
 
+    def self.get_attachments_from_eml(email_filename)
+      Enumerator.new do |yielder|
+        yielder << [File.basename(email_filename), lambda{|fn| open(fn, 'wb'){|fh| fh << open(email_filename){|f| f.read } } }]
+        mail = Mail.new open(email_filename){|f| f.read }
+        mail.attachments.each do |attachment|
+          yielder << [attachment.filename, lambda{|fn| open(fn, 'wb'){|fh| fh << attachment.body.decoded }}]
+        end
+      end
+    end
+
+
     def self.split_zip(archive_filename)
       Zip::File.open(archive_filename) do |zip_file|
         Enumerator.new do |yielder|
           zip_file.each do |entry|
-            yielder << [entry.name, lambda{|fn| entry.extract(fn) }]
+           begin
+             yielder << [entry.name, lambda{|fn| entry.extract(fn) }]
+           rescue
+             puts "unable to extract #{entry.name} from #{archive_filename}"
+           end             
           end
         end
       end

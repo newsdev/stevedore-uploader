@@ -1,8 +1,6 @@
-Dir["#{File.expand_path(File.dirname(__FILE__))}/../lib/*.rb"].each {|f| require f}
-Dir["#{File.expand_path(File.dirname(__FILE__))}/../lib/parsers/*.rb"].each {|f| require f}
 
 require 'rika'
-
+require 'jruby-openssl'
 require 'net/https'
 require 'elasticsearch'
 require 'elasticsearch/transport/transport/http/manticore'
@@ -12,8 +10,9 @@ require 'manticore'
 require 'fileutils'
 require 'csv'
 
-
 require 'aws-sdk'
+Dir["#{File.expand_path(File.dirname(__FILE__))}/../lib/*.rb"].each {|f| require f}
+Dir["#{File.expand_path(File.dirname(__FILE__))}/../lib/parsers/*.rb"].each {|f| require f}
 
 
 module Stevedore
@@ -33,15 +32,16 @@ module Stevedore
         },
       )
       @es_index = es_index
-      @s3_bucket = s3_bucket #|| (Stevedore::ESUploader.const_defined?(FOLDER) && FOLDER.downcase.include?('s3://') ? FOLDER.gsub(/s3:\/\//i, '').split("/", 2).first : nil)
-      @s3_basepath = "https://#{s3_bucket}.s3.amazonaws.com/#{s3_path || es_index}"
+      @s3_bucket = s3_bucket
+      @s3_basepath = "https://#{s3_bucket}.s3.amazonaws.com/#{s3_path || es_index}/"
+      @use_s3 = !s3_bucket.nil?
 
       @slice_size =  100
 
       @should_ocr = false
 
       self.create_index!
-      self.add_mapping(:doc, MAPPING)
+      self.add_mapping(:doc, Stevedore.const_defined?("MAPPING") ? MAPPING : DEFAULT_MAPPING)
     end
 
     def create_index!
@@ -92,25 +92,30 @@ module Stevedore
       }) # was "rescue nil" but that obscured meaningful errors
     end
 
-    def bulk_upload_to_es!(data, type=nil)
-      return nil if data.empty?
-      begin
-        resp = @client.bulk body: data.map{|datum| {index: {_index: @es_index, _type: type || 'doc', data: datum }} }
-        puts resp if resp[:errors]
-      rescue JSON::GeneratorError
-        data.each do |datum|
-          begin
-            @client.bulk body: [datum].map{|datum| {index: {_index: @es_index, _type: type || 'doc', data: datum }} }
-          rescue JSON::GeneratorError
-            next
+    def bulk_upload_to_es!(data, type=:doc)
+      return nil if data.compact.empty? 
+      if data.size == 1
+        resp = @client.index  index: @es_index, type: type, id: data.first["_id"], body: data.first
+      else
+        begin
+          resp = @client.bulk body: data.map{|datum| {index: {_index: @es_index, _type: type || 'doc', data: datum }} }
+          puts resp if resp[:errors]
+        rescue JSON::GeneratorError, Elasticsearch::Transport::Transport::Errors::InternalServerError
+          data.each do |datum|
+            begin
+              @client.bulk body: [datum].map{|datum| {index: {_index: @es_index, _type: type || 'doc', data: datum }} } unless datum.nil?
+            rescue JSON::GeneratorError, Elasticsearch::Transport::Transport::Errors::InternalServerError
+              next
+            end
           end
+          resp = nil
         end
         resp = nil
       end
       resp
     end
 
-    def process_document(filename, filename_for_s3)
+    def process_document(filename, download_url)
       begin
         puts "begin to process #{filename}"
         # puts "size: #{File.size(filename)}"
@@ -121,7 +126,7 @@ module Stevedore
           metadata = "couldn't be parsed"
         end
         puts "parsed: #{content.size}"
-        if content.size > 10 * (10 ** 6)
+        if content.size > 3 * (10 ** 7)
           @errors << filename
           puts "skipping #{filename} for being too big"
           return nil
@@ -133,9 +138,9 @@ module Stevedore
         # document types on its own
         ret = case                             # .eml                                          # .msg
               when metadata["Content-Type"] == "message/rfc822" || metadata["Content-Type"] == "application/vnd.ms-outlook"
-                ::Stevedore::StevedoreEmail.new_from_tika(content, metadata, filename_for_s3, filename).to_hash
+                ::Stevedore::StevedoreEmail.new_from_tika(content, metadata, download_url, filename).to_hash
               when metadata["Content-Type"] && ["application/html", "application/xhtml+xml"].include?(metadata["Content-Type"].split(";").first)
-                ::Stevedore::StevedoreHTML.new_from_tika(content, metadata, filename_for_s3, filename).to_hash
+                ::Stevedore::StevedoreHTML.new_from_tika(content, metadata, download_url, filename).to_hash
               when @should_ocr && metadata["Content-Type"] == "application/pdf" && (content.match(/\A\s*\z/) || content.size < 50 * metadata["xmpTPg:NPages"].to_i )
                 # this is a scanned PDF.
                 puts "scanned PDF #{File.basename(filename)} detected; OCRing"
@@ -146,7 +151,7 @@ module Stevedore
                   File.delete(png)
                   # no need to use a system call when we could use the stdlib!
                   # system("rm", "-f", png) rescue nil
-                  File.delete("#{png}.txt")
+                  File.delete("#{png}.txt") rescue nil
                 end.join("\n\n")
                 # e.g.  Analysis-Corporation-2.png.pdf or Torture.pdf
                 files = Dir["#{pdf_basename}.png.pdf"] + (Dir["#{pdf_basename}-*.png.pdf"].sort_by{|pdf| Regexp.new("#{pdf_basename}-([0-9]+).png.pdf").match(pdf)[1].to_i })
@@ -154,9 +159,9 @@ module Stevedore
                 system('pdftk', *files, "cat", "output", "#{pdf_basename}.ocr.pdf")
                 content, _ = Rika.parse_content_and_metadata("#{pdf_basename}.ocr.pdf")
                 puts "OCRed content (#{File.basename(filename)}) length: #{content.length}"
-                ::Stevedore::StevedoreBlob.new_from_tika(content, metadata, filename_for_s3, filename).to_hash
+                ::Stevedore::StevedoreBlob.new_from_tika(content, metadata, download_url, filename).to_hash
               else
-                ::Stevedore::StevedoreBlob.new_from_tika(content, metadata, filename_for_s3, filename).to_hash
+                ::Stevedore::StevedoreBlob.new_from_tika(content, metadata, download_url, filename).to_hash
               end
       [ret, content, metadata]
       rescue StandardError, java.lang.NoClassDefFoundError, org.apache.tika.exception.TikaException => e
@@ -200,7 +205,6 @@ module Stevedore
       output_stream.puts "Processing documents from #{target_path}"
 
       docs_so_far = 0
-      use_s3 = false # option to set this (an option to set document URLs to be relative to the search engine root) is TK
       @s3_bucket =  target_path.gsub(/s3:\/\//i, '').split("/", 2).first if @s3_bucket.nil? && target_path.downcase.include?('s3://')
 
       if target_path.downcase.include?("s3://")
@@ -237,6 +241,7 @@ module Stevedore
               # PDFs can (theoretically) contain documents as "attachments" -- those aren't handled here either.x
               if ArchiveSplitter::HANDLED_FORMATS.include?(tmp_filename.split(".")[-1]) 
                 ArchiveSplitter.split(tmp_filename).map do |constituent_file, constituent_basename|
+                  doc = {} if doc.nil?                   
                   doc, content, metadata = process_document(constituent_file, download_filename)
                   doc["sha1"] = Digest::SHA1.hexdigest(download_filename + File.basename(constituent_basename)) # since these files all share a download URL (that of the archive, we need to come up with a custom sha1)
                   yield doc, obj.key, content, metadata if block_given?
@@ -250,12 +255,18 @@ module Stevedore
                 [doc]
               end
             end
+            retry_count = 0             
             begin
-              resp = bulk_upload_to_es!(slice_of_objs.compact.flatten(1).reject(&:empty?)) ) # flatten, in case there's an archive
+              resp = bulk_upload_to_es!(slice_of_objs.compact.flatten(1).reject(&:empty?)) # flatten, in case there's an archive
               puts resp.inspect if resp && resp["errors"]
             rescue Manticore::Timeout, Manticore::SocketException
               output_stream.puts("retrying at #{Time.now}")
-              retry
+              if retry_count < 10
+                retry_count += 1              
+                retry
+              else
+                @errors << filename
+              end 
             end
             output_stream.puts "uploaded #{slice_of_objs.size} files to #{@es_index}; #{docs_so_far} uploaded so far"
             output_stream.puts "Errors in bulk upload: #{resp.inspect}" if resp && resp["errors"]
@@ -269,12 +280,13 @@ module Stevedore
 
           slice_of_files.map! do |filename|
             next unless File.file?(filename)
-            filename_basepath = filename.gsub(target_path, '')
-            # if use_s3  # turning this on TK
-              download_filename = @s3_basepath + filename_basepath
-            # else
-            #   download_filename = "/files/#{@es_index}/#{filename_basepath}"
-            # end
+            filename_basepath = filename.gsub(target_path.split("*").first, '')             
+
+            if @use_s3  # turning this on TK
+              download_filename = @s3_basepath + ((filename_basepath[0] == '/' || @s3_basepath[-1] == '/') ? '' : '/') + filename_basepath               
+            else
+              download_filename = "/files/#{@es_index}/#{filename_basepath}"
+            end
 
             # is this file an archive that contains a bunch of documents we should index separately?
             # obviously, there is not a strict definition here.
@@ -285,6 +297,7 @@ module Stevedore
               ArchiveSplitter.split(filename).map do |constituent_file, constituent_basename|
                 doc, content, metadata = process_document(constituent_file, download_filename)
                 doc["sha1"] = Digest::SHA1.hexdigest(download_filename + File.basename(constituent_basename)) # since these files all share a download URL (that of the archive, we need to come up with a custom sha1)
+                doc["id"] = doc["sha1"]
                 yield doc, filename, content, metadata if block_given?
                 # FileUtils.rm(constituent_file) rescue Errno::ENOENT # try to delete, but no biggie if it doesn't work for some weird reason.
                 doc
@@ -295,6 +308,7 @@ module Stevedore
               [doc]
             end
           end
+          retry_count = 0
           begin
             resp = bulk_upload_to_es!(slice_of_files.compact.flatten(1)) # flatten, in case there's an archive
             puts resp.inspect if resp && resp["errors"]
@@ -303,7 +317,12 @@ module Stevedore
             output_stream.puts "Upload error: #{e} #{e.message}."
             output_stream.puts e.backtrace.join("\n") + "\n\n\n"
             output_stream.puts("retrying at #{Time.now}")
-            retry
+            if retry_count < 10
+              retry_count += 1              
+              retry
+            else
+              @errors << filename
+            end 
           end
           output_stream.puts "uploaded #{slice_of_files.size} files to #{@es_index}; #{docs_so_far} uploaded so far"
           output_stream.puts "Errors in bulk upload: #{resp.inspect}" if resp && resp["errors"]
@@ -311,7 +330,7 @@ module Stevedore
       end
     end
   end
-  MAPPING = {
+  DEFAULT_MAPPING = {
               sha1: {type: :string, index: :not_analyzed},
               title: { type: :string, analyzer: :keyword },
               source_url: {type: :string, index: :not_analyzed},

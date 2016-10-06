@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name        = 'stevedore-uploader'
-  s.version     = '1.0.2'
+  s.version     = '1.0.4'
   s.licenses    = ['MIT']
   s.summary     = "Upload documents to a Stevedore search engine."
   s.description = "TK"
@@ -11,7 +11,7 @@ Gem::Specification.new do |s|
   s.homepage    = 'https://github.com/newsdev/stevedore-uploader'
   s.add_dependency("elasticsearch", "~> 1.0")
   s.add_dependency("manticore")
-  s.add_dependency("jruby-openssl", "~> 0.9")  
+  s.add_dependency("jruby-openssl", "~> 0.9.17")  
   s.add_dependency("aws-sdk", "~> 2")  
   s.add_dependency("rika-stevedore", ">= 1.6.1")  
   s.add_dependency("nokogiri", "~> 1.6")

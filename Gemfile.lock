@@ -1,27 +1,27 @@
 PATH
   remote: .
   specs:
-    stevedore-uploader (1.0.0-java)
+    stevedore-uploader (1.0.4-java)
       aws-sdk (~> 2)
       elasticsearch (~> 1.0)
-      jruby-openssl (~> 0.9)
+      jruby-openssl (~> 0.9.17)
       mail (~> 2.6)
       manticore
       nokogiri (~> 1.6)
       pst (~> 0.0.2)
       rika-stevedore (>= 1.6.1)
-      rubyzip (~> 1.2)
+      rubyzip (~> 1.1)
 
 GEM
   remote: https://rubygems.org/
   specs:
     andand (1.3.3)
-    aws-sdk (2.3.8)
-      aws-sdk-resources (= 2.3.8)
-    aws-sdk-core (2.3.8)
+    aws-sdk (2.3.9)
+      aws-sdk-resources (= 2.3.9)
+    aws-sdk-core (2.3.9)
       jmespath (~> 1.0)
-    aws-sdk-resources (2.3.8)
-      aws-sdk-core (= 2.3.8)
+    aws-sdk-resources (2.3.9)
+      aws-sdk-core (= 2.3.9)
     elasticsearch (1.0.17)
       elasticsearch-api (= 1.0.17)
       elasticsearch-transport (= 1.0.17)
@@ -34,7 +34,7 @@ GEM
       multipart-post (>= 1.2, < 3)
     jmespath (1.2.4)
       json_pure (>= 1.8.1)
-    jruby-openssl (0.9.16-java)
+    jruby-openssl (0.9.17-java)
     json_pure (1.8.3)
     mail (2.6.4)
       mime-types (>= 1.16, < 4)

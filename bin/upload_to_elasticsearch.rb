@@ -34,15 +34,20 @@ if __FILE__ == $0
       options.s3bucket = s3bucket
     end
 
-    opts.on("--title_column=COLNAME",
+    opts.on("--title-column=COLNAME",
             "If target file is a CSV, which column contains the title of the row. Integer index or string column name."
       ) do |title_column|
       options.title_column = title_column
     end
-    opts.on("--text_column=COLNAME",
+    opts.on("--text-column=COLNAME",
             "If target file is a CSV, which column contains the main, searchable of the row. Integer index or string column name."
       ) do |text_column|
       options.text_column = text_column
+    end
+    opts.on("--slice-size=SLICE",
+            "Process documents in batches of SLICE. Default is 100. Lower this if you get timeouts. Raise it to go faster."
+      ) do |slice_size|
+      options.slice_size = slice_size.to_i
     end
 
     opts.on("-o", "--[no-]ocr", "don't attempt to OCR any PDFs, even if they contain no text") do |v|
@@ -95,7 +100,9 @@ raise ArgumentError, "specify the elasticsearch host" unless ES_HOST
 if __FILE__ == $0
   f = Stevedore::ESUploader.new(ES_HOST, ES_INDEX, S3_BUCKET, S3_BASEPATH)
   f.should_ocr = options.ocr
-  puts "Will not OCR, per --no-ocr option" unless f.should_ocr
+  puts "Will not OCR, per --no-ocr option" unless f.should_ocr  
+  f.slice_size = options.slice_size if options.slice_size
+  puts "Slice size set to #{f.slice_size}" if options.slice_size  
 
   if FOLDER.match(/\.[ct]sv$/)
     f.do_csv!(FOLDER, File.join(f.s3_basepath, File.basename(FOLDER)), options.title_column, options.text_column)
