@@ -20,7 +20,6 @@ module Stevedore
         attachment_filename = CGI::unescape(raw_attachment_filename)
         possible_filename = File.join(File.dirname(filepath), attachment_filename)
         eml_filename = File.join(File.dirname(filepath), File.basename(filepath, '.eml') + '-' + attachment_filename)
-        s3_path = S3_BASEPATH + File.dirname(filepath).gsub(::FOLDER, '')
         possible_s3_url = S3_BASEPATH + '/' + CGI::escape(File.basename(possible_filename))
         possible_eml_s3_url = S3_BASEPATH + '/' + CGI::escape(File.basename(eml_filename))
 

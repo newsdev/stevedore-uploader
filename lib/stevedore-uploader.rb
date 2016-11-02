@@ -23,6 +23,7 @@ module Stevedore
 
     def initialize(es_host, es_index, s3_bucket=nil, s3_path=nil)
       @errors = []  
+      puts "es_host, #{es_host}"
       @client = Elasticsearch::Client.new({
           log: false,
           url: es_host,
@@ -240,9 +241,11 @@ module Stevedore
               # but, for now, standalone emails are treated as one document
               # PDFs can (theoretically) contain documents as "attachments" -- those aren't handled here either.x
               if ArchiveSplitter::HANDLED_FORMATS.include?(tmp_filename.split(".")[-1]) 
-                ArchiveSplitter.split(tmp_filename).map do |constituent_file, constituent_basename|
-                  doc = {} if doc.nil?                   
+                ArchiveSplitter.split(tmp_filename).map do |constituent_file, constituent_basename, attachment_basenames, parent_basename|
                   doc, content, metadata = process_document(constituent_file, download_filename)
+                  doc["analyzed"] ||= {}
+                  doc["analyzed"]["metadata"] ||= {}
+                  doc["analyzed"]["metadata"]["attachments"] = (parent_basename.nil? ? [] : [Digest::SHA1.hexdigest(download_filename + parent_basename)]) + attachment_basenames.map{|attachment| Digest::SHA1.hexdigest(download_filename + attachment) } # is a list of filenames
                   doc["sha1"] = Digest::SHA1.hexdigest(download_filename + File.basename(constituent_basename)) # since these files all share a download URL (that of the archive, we need to come up with a custom sha1)
                   yield doc, obj.key, content, metadata if block_given?
                   FileUtils.rm(constituent_file) rescue Errno::ENOENT # try to delete, but no biggie if it doesn't work for some weird reason.
@@ -294,8 +297,12 @@ module Stevedore
             # but, for now, standalone emails are treated as one document
             # PDFs can (theoretically) contain documents as "attachments" -- those aren't handled here either.
             if ArchiveSplitter::HANDLED_FORMATS.include?(filename.split(".")[-1]) 
-              ArchiveSplitter.split(filename).map do |constituent_file, constituent_basename|
+                ArchiveSplitter.split(filename).map do |constituent_file, constituent_basename, attachment_basenames, parent_basename|
                 doc, content, metadata = process_document(constituent_file, download_filename)
+                doc = {} if doc.nil?
+                doc["analyzed"] ||= {}
+                doc["analyzed"]["metadata"] ||= {}
+                doc["analyzed"]["metadata"]["attachments"] = (parent_basename.nil? ? [] : [Digest::SHA1.hexdigest(download_filename + parent_basename)]) + attachment_basenames.map{|attachment| Digest::SHA1.hexdigest(download_filename + attachment) } # is a list of filenames
                 doc["sha1"] = Digest::SHA1.hexdigest(download_filename + File.basename(constituent_basename)) # since these files all share a download URL (that of the archive, we need to come up with a custom sha1)
                 doc["id"] = doc["sha1"]
                 yield doc, filename, content, metadata if block_given?
