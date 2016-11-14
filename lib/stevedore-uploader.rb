@@ -11,6 +11,7 @@ require 'fileutils'
 require 'csv'
 
 require 'aws-sdk'
+require 'aws-sdk-resources'
 Dir["#{File.expand_path(File.dirname(__FILE__))}/../lib/*.rb"].each {|f| require f}
 Dir["#{File.expand_path(File.dirname(__FILE__))}/../lib/parsers/*.rb"].each {|f| require f}
 
