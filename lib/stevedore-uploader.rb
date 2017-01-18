@@ -156,7 +156,7 @@ module Stevedore
                   File.delete("#{png}.txt") rescue nil
                 end.join("\n\n")
                 # e.g.  Analysis-Corporation-2.png.pdf or Torture.pdf
-                files = Dir["#{pdf_basename}.png.pdf"] + (Dir["#{pdf_basename}-*.png.pdf"].sort_by{|pdf| Regexp.new("#{pdf_basename}-([0-9]+).png.pdf").match(pdf)[1].to_i })
+                files = Dir["#{pdf_basename}.png.pdf"] + (Dir["#{pdf_basename}-*.png.pdf"].sort_by{|pdf| (m = Regexp.new("#{pdf_basename}-([0-9]+).png.pdf").match(pdf)) ? m[1].to_i : 69420 }) # 69420 is a random really big number, sorting those docs to the end.
                 if files.empty?
                   content = ''
                 else
