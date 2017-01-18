@@ -322,6 +322,7 @@ module Stevedore
                 yield doc, filename, content, metadata if block_given?
                 doc["file"]["title"] ||= "Untitled Document: #{HumanHash::HumanHasher.new.humanize(doc["_id"])}"
                 # FileUtils.rm(constituent_file) rescue Errno::ENOENT # try to delete, but no biggie if it doesn't work for some weird reason.
+                puts doc.inspect
                 doc
               end
             else
