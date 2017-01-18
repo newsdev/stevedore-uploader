@@ -138,7 +138,7 @@ module Stevedore
         # TODO: factor these out in favor of the yield/block situation down below.
         # this should (eventually) be totally generic, but perhaps handle common 
         # document types on its own
-        ret = case                             # .eml                                          # .msg
+        doc = case                             # .eml                                          # .msg
               when metadata["Content-Type"] == "message/rfc822" || metadata["Content-Type"] == "application/vnd.ms-outlook"
                 ::Stevedore::StevedoreEmail.new_from_tika(content, metadata, download_url, filename).to_hash
               when metadata["Content-Type"] && ["application/html", "application/xhtml+xml"].include?(metadata["Content-Type"].split(";").first)
@@ -157,15 +157,18 @@ module Stevedore
                 end.join("\n\n")
                 # e.g.  Analysis-Corporation-2.png.pdf or Torture.pdf
                 files = Dir["#{pdf_basename}.png.pdf"] + (Dir["#{pdf_basename}-*.png.pdf"].sort_by{|pdf| Regexp.new("#{pdf_basename}-([0-9]+).png.pdf").match(pdf)[1].to_i })
-                return nil if files.empty?
-                system('pdftk', *files, "cat", "output", "#{pdf_basename}.ocr.pdf")
-                content, _ = Rika.parse_content_and_metadata("#{pdf_basename}.ocr.pdf")
+                if files.empty?
+                  content = ''
+                else
+                  system('pdftk', *files, "cat", "output", "#{pdf_basename}.ocr.pdf")
+                  content, _ = Rika.parse_content_and_metadata("#{pdf_basename}.ocr.pdf")
+                end
                 puts "OCRed content (#{File.basename(filename)}) length: #{content.length}"
                 ::Stevedore::StevedoreBlob.new_from_tika(content, metadata, download_url, filename).to_hash
               else
                 ::Stevedore::StevedoreBlob.new_from_tika(content, metadata, download_url, filename).to_hash
               end
-      [ret, content, metadata]
+      [doc, content, metadata]
       rescue StandardError, java.lang.NoClassDefFoundError, org.apache.tika.exception.TikaException => e
         STDERR.puts e.inspect
         STDERR.puts "#{e} #{e.message}: #{filename}"
@@ -248,14 +251,22 @@ module Stevedore
                   doc["analyzed"]["metadata"] ||= {}
                   doc["analyzed"]["metadata"]["attachments"] = (parent_basename.nil? ? [] : [Digest::SHA1.hexdigest(download_filename + parent_basename)]) + attachment_basenames.map{|attachment| Digest::SHA1.hexdigest(download_filename + attachment) } # is a list of filenames
                   doc["sha1"] = Digest::SHA1.hexdigest(download_filename + File.basename(constituent_basename)) # since these files all share a download URL (that of the archive, we need to come up with a custom sha1)
+                  doc["id"] = doc["sha1"]
+                  doc["_id"] = doc["sha1"]
+                  doc["file"] ||= {}
                   yield doc, obj.key, content, metadata if block_given?
                   FileUtils.rm(constituent_file) rescue Errno::ENOENT # try to delete, but no biggie if it doesn't work for some weird reason.
+                  doc["file"]["title"] ||= "Untitled Document: #{HumanHash::HumanHasher.new.humanize(doc["_id"])}"
                   doc
                 end
               else 
                 doc, content, metadata = process_document(tmp_filename, download_filename)
+                doc["id"] = doc["sha1"]
+                doc["_id"] = doc["sha1"]
+                doc["file"] ||= {}
                 yield doc, obj.key, content, metadata if block_given?
                 FileUtils.rm(tmp_filename) rescue Errno::ENOENT # try to delete, but no biggie if it doesn't work for some weird reason.
+                doc["file"]["title"] ||= "Untitled Document: #{HumanHash::HumanHasher.new.humanize(doc["_id"])}"
                 [doc]
               end
             end
@@ -306,13 +317,20 @@ module Stevedore
                 doc["analyzed"]["metadata"]["attachments"] = (parent_basename.nil? ? [] : [Digest::SHA1.hexdigest(download_filename + parent_basename)]) + attachment_basenames.map{|attachment| Digest::SHA1.hexdigest(download_filename + attachment) } # is a list of filenames
                 doc["sha1"] = Digest::SHA1.hexdigest(download_filename + File.basename(constituent_basename)) # since these files all share a download URL (that of the archive, we need to come up with a custom sha1)
                 doc["id"] = doc["sha1"]
+                doc["_id"] = doc["sha1"]
+                doc["file"] ||= {}
                 yield doc, filename, content, metadata if block_given?
+                doc["file"]["title"] ||= "Untitled Document: #{HumanHash::HumanHasher.new.humanize(doc["_id"])}"
                 # FileUtils.rm(constituent_file) rescue Errno::ENOENT # try to delete, but no biggie if it doesn't work for some weird reason.
                 doc
               end
             else
               doc, content, metadata = process_document(filename, download_filename  )
+              doc["id"] = doc["sha1"]
+              doc["_id"] = doc["sha1"]
+              doc["file"] ||= {}
               yield doc, filename, content, metadata if block_given?
+              doc["file"]["title"] ||= "Untitled Document: #{HumanHash::HumanHasher.new.humanize(doc["_id"])}"
               [doc]
             end
           end

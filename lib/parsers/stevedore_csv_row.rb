@@ -1,7 +1,7 @@
 require 'digest/sha1'
 
 module Stevedore
-  class StevedoreCsvRow
+  class StevedoreCsvRow < StevedoreBlob
     attr_accessor :title, :text, :download_url, :whole_row, :row_num
     def initialize(title, text, row_num, download_url, whole_row={})
       self.title = title || download_url

@@ -74,4 +74,4 @@ end
 Questions?
 ==========
 
-Hit us up in the [Stevedore](https://github.com/newsdev/stevedore) issues. Whichever suits your fancy.
+Hit us up in the [Stevedore](https://github.com/newsdev/stevedore) issues.
