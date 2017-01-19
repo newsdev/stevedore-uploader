@@ -26,12 +26,16 @@ module Stevedore
     end
 
     def to_hash
+      sha =  Digest::SHA1.hexdigest(download_url)
+      # TODO should merge in or something?
       {
-        "sha1" => Digest::SHA1.hexdigest(download_url),        
-        "title" => title.to_s,
+        "sha1" => sha,
+        "id" => sha,
+        "_id" => sha,
+        "title" => title.to_s || "Untitled Document: #{HumanHash::HumanHasher.new.humanize(sha)}",
         "source_url" => download_url.to_s,
         "file" => {
-          "title" => title.to_s,
+          "title" => title.to_s || "Untitled Document: #{HumanHash::HumanHasher.new.humanize(sha)}",
           "file" => clean_text.to_s
         },
         "analyzed" => {
@@ -40,7 +44,7 @@ module Stevedore
             "Content-Type" => extra["Content-Type"] || "text/plain"
           }
         },
-        "_updatedAt" => Time.now      
+        "_updatedAt" => Time.now,   
       }
     end
 

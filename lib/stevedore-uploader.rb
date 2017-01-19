@@ -249,11 +249,13 @@ module Stevedore
                   doc, content, metadata = process_document(constituent_file, download_filename)
                   doc["analyzed"] ||= {}
                   doc["analyzed"]["metadata"] ||= {}
+
+                  # this is a hack: but we're replicating how IDs are calculated (in parsers/stevedore_blob.rb) to make "attachments" the list of IDs of all documents in the archive
+                  # we have to set separate sha1s for these, because they're by default based only on the download URL (which is the same for all of the constituent files)
                   doc["analyzed"]["metadata"]["attachments"] = (parent_basename.nil? ? [] : [Digest::SHA1.hexdigest(download_filename + parent_basename)]) + attachment_basenames.map{|attachment| Digest::SHA1.hexdigest(download_filename + attachment) } # is a list of filenames
                   doc["sha1"] = Digest::SHA1.hexdigest(download_filename + File.basename(constituent_basename)) # since these files all share a download URL (that of the archive, we need to come up with a custom sha1)
                   doc["id"] = doc["sha1"]
                   doc["_id"] = doc["sha1"]
-                  doc["file"] ||= {}
                   yield doc, obj.key, content, metadata if block_given?
                   FileUtils.rm(constituent_file) rescue Errno::ENOENT # try to delete, but no biggie if it doesn't work for some weird reason.
                   doc["file"]["title"] ||= "Untitled Document: #{HumanHash::HumanHasher.new.humanize(doc["_id"])}"
@@ -261,12 +263,8 @@ module Stevedore
                 end
               else 
                 doc, content, metadata = process_document(tmp_filename, download_filename)
-                doc["id"] = doc["sha1"]
-                doc["_id"] = doc["sha1"]
-                doc["file"] ||= {}
                 yield doc, obj.key, content, metadata if block_given?
                 FileUtils.rm(tmp_filename) rescue Errno::ENOENT # try to delete, but no biggie if it doesn't work for some weird reason.
-                doc["file"]["title"] ||= "Untitled Document: #{HumanHash::HumanHasher.new.humanize(doc["_id"])}"
                 [doc]
               end
             end
@@ -311,27 +309,24 @@ module Stevedore
             if ArchiveSplitter::HANDLED_FORMATS.include?(filename.split(".")[-1]) 
                 ArchiveSplitter.split(filename).map do |constituent_file, constituent_basename, attachment_basenames, parent_basename|
                 doc, content, metadata = process_document(constituent_file, download_filename)
-                doc = {} if doc.nil?
                 doc["analyzed"] ||= {}
                 doc["analyzed"]["metadata"] ||= {}
+                
+                # this is a hack: but we're replicating how IDs are calculated (in parsers/stevedore_blob.rb) to make "attachments" the list of IDs of all documents in the archive
+                # we have to set separate sha1s for these, because they're by default based only on the download URL (which is the same for all of the constituent files)
                 doc["analyzed"]["metadata"]["attachments"] = (parent_basename.nil? ? [] : [Digest::SHA1.hexdigest(download_filename + parent_basename)]) + attachment_basenames.map{|attachment| Digest::SHA1.hexdigest(download_filename + attachment) } # is a list of filenames
                 doc["sha1"] = Digest::SHA1.hexdigest(download_filename + File.basename(constituent_basename)) # since these files all share a download URL (that of the archive, we need to come up with a custom sha1)
                 doc["id"] = doc["sha1"]
                 doc["_id"] = doc["sha1"]
-                doc["file"] ||= {}
+                
                 yield doc, filename, content, metadata if block_given?
-                doc["file"]["title"] ||= "Untitled Document: #{HumanHash::HumanHasher.new.humanize(doc["_id"])}"
                 # FileUtils.rm(constituent_file) rescue Errno::ENOENT # try to delete, but no biggie if it doesn't work for some weird reason.
                 puts doc.inspect
                 doc
               end
             else
               doc, content, metadata = process_document(filename, download_filename  )
-              doc["id"] = doc["sha1"]
-              doc["_id"] = doc["sha1"]
-              doc["file"] ||= {}
               yield doc, filename, content, metadata if block_given?
-              doc["file"]["title"] ||= "Untitled Document: #{HumanHash::HumanHasher.new.humanize(doc["_id"])}"
               [doc]
             end
           end
