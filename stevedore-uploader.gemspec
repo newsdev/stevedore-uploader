@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name        = 'stevedore-uploader'
-  s.version     = '1.0.8'
+  s.version     = '1.0.9'
   s.licenses    = ['MIT']
   s.summary     = "Upload documents to a Stevedore search engine."
   s.description = "TK"
@@ -19,5 +19,6 @@ Gem::Specification.new do |s|
   s.add_dependency("mail", "~> 2.6")
   s.add_dependency("rubyzip", "~> 1.1")
   s.add_dependency("humanhash", "~> 0.1.0")
+  s.add_dependency("dkimverify", "~> 0.0.3")
 
 end
