@@ -2,12 +2,15 @@ require_relative './stevedore_blob'
 require 'cgi'
 require 'digest/sha1'
 require 'manticore'
+require 'dkimverify'
+
+
 module Stevedore
   class StevedoreEmail < StevedoreBlob
 
 
     # TODO write wrt other fields. where do those go???
-    attr_accessor :creation_date, :message_to, :message_from, :message_cc, :subject, :attachments, :content_type
+    attr_accessor :creation_date, :message_to, :message_from, :message_cc, :subject, :attachments, :content_type, :dkim_verified
 
     def self.new_from_tika(content, metadata, download_url, filepath)
       t = super
@@ -16,6 +19,11 @@ module Stevedore
       t.message_from = metadata["Message-From"]
       t.message_cc = metadata["Message-Cc"]
       t.title = t.subject = metadata["subject"]
+      t.dkim_verified = begin 
+                          Dkim::Verifier.new(filepath).verify!
+                        rescue Dkim::DkimError
+                          false
+                        end
       t.attachments = metadata["X-Attachments"].to_s.split("|").map do |raw_attachment_filename| 
         attachment_filename = CGI::unescape(raw_attachment_filename)
         possible_filename = File.join(File.dirname(filepath), attachment_filename)
@@ -72,7 +80,8 @@ module Stevedore
             "Message-From" => message_to.is_a?(Enumerable) ? message_to : [ message_to ],
             "Message-Cc" => message_cc.is_a?(Enumerable) ? message_cc : [ message_cc ],
             "subject" => subject,
-            "attachments" => attachments
+            "attachments" => attachments,
+            "dkim_verified" => dkim_verified
           }
         },
         "_updatedAt" => Time.now

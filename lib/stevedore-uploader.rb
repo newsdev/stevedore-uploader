@@ -223,7 +223,6 @@ module Stevedore
           s3_path_without_bucket = target_path.gsub(/s3:\/\//i, '').split("/", 2).last
           bucket.objects(:prefix => s3_path_without_bucket).each_slice(@slice_size) do |slice_of_objs|
             docs_so_far += slice_of_objs.size
-
             output_stream.puts "starting a set of #{@slice_size} -- so far #{docs_so_far}"
             slice_of_objs.map! do |obj|
               next if obj.key[-1] == "/"
@@ -247,6 +246,7 @@ module Stevedore
               if ArchiveSplitter::HANDLED_FORMATS.include?(tmp_filename.split(".")[-1]) 
                 ArchiveSplitter.split(tmp_filename).map do |constituent_file, constituent_basename, attachment_basenames, parent_basename|
                   doc, content, metadata = process_document(constituent_file, download_filename)
+                  next nil if doc.nil?
                   doc["analyzed"] ||= {}
                   doc["analyzed"]["metadata"] ||= {}
 
@@ -309,6 +309,7 @@ module Stevedore
             if ArchiveSplitter::HANDLED_FORMATS.include?(filename.split(".")[-1]) 
                 ArchiveSplitter.split(filename).map do |constituent_file, constituent_basename, attachment_basenames, parent_basename|
                 doc, content, metadata = process_document(constituent_file, download_filename)
+                next nil if doc.nil?
                 doc["analyzed"] ||= {}
                 doc["analyzed"]["metadata"] ||= {}
                 
