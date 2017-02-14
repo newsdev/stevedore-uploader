@@ -19,6 +19,6 @@ Gem::Specification.new do |s|
   s.add_dependency("mail", "~> 2.6")
   s.add_dependency("rubyzip", "~> 1.1")
   s.add_dependency("humanhash", "~> 0.1.0")
-  s.add_dependency("dkimverify", "~> 0.0.3")
+  s.add_dependency("dkimverify", "~> 0.0.4")
 
 end
