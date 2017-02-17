@@ -11,7 +11,7 @@ PATH
       manticore (= 0.6.0)
       nokogiri (~> 1.6)
       pst (~> 0.0.2)
-      rika-stevedore (~> 1.7)
+      rika-stevedore (~> 1.7.4)
       rubyzip (~> 1.1)
 
 GEM
@@ -56,7 +56,7 @@ GEM
       blankslate (>= 2.0, <= 4.0)
     pst (0.0.2)
       andand
-    rika-stevedore (1.7.2-java)
+    rika-stevedore (1.7.4-java)
     rubyzip (1.2.1)
 
 PLATFORMS
