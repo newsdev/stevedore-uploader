@@ -20,8 +20,8 @@ module Stevedore
       t.message_cc = metadata["Message-Cc"]
       t.title = t.subject = metadata["subject"]
       t.dkim_verified = begin 
-                          Dkim::Verifier.new(filepath).verify!
-                        rescue Dkim::DkimError
+                          DkimVerify::Verification::Verifier.new(open(filepath, 'r'){|f| f.read }).verify!
+                        rescue DkimVerify::Verification::DkimError
                           false
                         end
       t.attachments = metadata["X-Attachments"].to_s.split("|").map do |raw_attachment_filename| 

@@ -117,6 +117,31 @@ module Stevedore
       resp
     end
 
+    def self.ocr_pdf(filename)
+      pdf_basename = filename.gsub(".pdf", '')
+      ocred_pdf_filename = "#{pdf_basename}.ocr.pdf"
+
+      ret = system("convert","-monochrome","-density","300x300",filename,"-depth",'8',"#{pdf_basename}.png")
+      if ret.nil?
+        STDERR.puts "No imagemagick or ghostscript (or not on path); skipping OCR"
+        return nil
+      end
+      (Dir["#{pdf_basename}-*.png"] + Dir["#{pdf_basename}.png"]).sort_by{|png| (matchdata = png.match(/-\d+\.png/)).nil? ? 0 : matchdata[0].to_i }.each do |png|
+        ret = system('tesseract', png, png, "pdf", "")
+        if ret.nil?
+          STDERR.puts "No tesseract (or not on path); skipping OCR"
+          return nil
+        end
+        File.delete(png)
+        File.delete("#{png}.txt") rescue nil
+      end.join("\n\n")
+      # e.g.  Analysis-Corporation-2.png.pdf or Torture.pdf
+      files = Dir["#{pdf_basename}.png.pdf"] + (Dir["#{pdf_basename}-*.png.pdf"].sort_by{|pdf| (m = Regexp.new("#{pdf_basename}-([0-9]+).png.pdf").match(pdf)) ? m[1].to_i : 69420 })
+      return nil if files.empty?
+      system('pdftk', *files, "cat", "output", ocred_pdf_filename)
+      ocred_pdf_filename
+    end
+
     def process_document(filename, download_url)
       begin
         puts "begin to process #{filename}"
@@ -128,12 +153,11 @@ module Stevedore
           metadata = "couldn't be parsed"
         end
         puts "parsed: #{content.size}"
-        if content.size > 3 * (10 ** 7)
+        if content.size > 3 * (10 ** 7) # 12071712
           @errors << filename
           puts "skipping #{filename} for being too big"
           return nil
         end
-        puts metadata["Content-Type"].inspect
 
         # TODO: factor these out in favor of the yield/block situation down below.
         # this should (eventually) be totally generic, but perhaps handle common 
@@ -146,23 +170,14 @@ module Stevedore
               when @should_ocr && metadata["Content-Type"] == "application/pdf" && (content.match(/\A\s*\z/) || content.size < 50 * metadata["xmpTPg:NPages"].to_i )
                 # this is a scanned PDF.
                 puts "scanned PDF #{File.basename(filename)} detected; OCRing"
-                pdf_basename = filename.gsub(".pdf", '')
-                system("convert","-monochrome","-density","300x300",filename,"-depth",'8',"#{pdf_basename}.png")
-                (Dir["#{pdf_basename}-*.png"] + Dir["#{pdf_basename}.png"]).sort_by{|png| (matchdata = png.match(/-\d+\.png/)).nil? ? 0 : matchdata[0].to_i }.each do |png|
-                  system('tesseract', png, png, "pdf")
-                  File.delete(png)
-                  # no need to use a system call when we could use the stdlib!
-                  # system("rm", "-f", png) rescue nil
-                  File.delete("#{png}.txt") rescue nil
-                end.join("\n\n")
-                # e.g.  Analysis-Corporation-2.png.pdf or Torture.pdf
-                files = Dir["#{pdf_basename}.png.pdf"] + (Dir["#{pdf_basename}-*.png.pdf"].sort_by{|pdf| (m = Regexp.new("#{pdf_basename}-([0-9]+).png.pdf").match(pdf)) ? m[1].to_i : 69420 }) # 69420 is a random really big number, sorting those docs to the end.
-                if files.empty?
-                  content = ''
+
+                ocred_pdf_filename = ESUploader.ocr_pdf(filename)
+                if ocred_pdf_filename
+                  content, _ = Rika.parse_content_and_metadata(ocred_pdf_filename)
                 else
-                  system('pdftk', *files, "cat", "output", "#{pdf_basename}.ocr.pdf")
-                  content, _ = Rika.parse_content_and_metadata("#{pdf_basename}.ocr.pdf")
+                  content = ''
                 end
+
                 puts "OCRed content (#{File.basename(filename)}) length: #{content.length}"
                 ::Stevedore::StevedoreBlob.new_from_tika(content, metadata, download_url, filename).to_hash
               else
@@ -206,6 +221,30 @@ module Stevedore
       end
     end
 
+    def download_from_s3(dir, obj)
+      tmp_filename = File.join(dir, obj.key)
+      retried = false
+      begin
+        body = obj.get.body.read
+        File.open(tmp_filename, 'wb'){|f| f << body}
+      rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::Http503Error
+        @errors << obj.key
+      rescue ArgumentError
+        File.open(tmp_filename, 'wb'){|f| f << body.nil? ? '' : body.chars.select(&:valid_encoding?).join}
+      rescue Seahorse::Client::NetworkingError
+        unless retried
+          retried = true
+          retry
+        else
+          puts "looks like the network's down... press any key to continue once the network's back up"
+          gets
+          retry
+        end
+      end
+      tmp_filename              
+    end
+
+
     def do!(target_path, output_stream=STDOUT)
       output_stream.puts "Processing documents from #{target_path}"
 
@@ -227,15 +266,7 @@ module Stevedore
             slice_of_objs.map! do |obj|
               next if obj.key[-1] == "/"
               FileUtils.mkdir_p(File.join(dir, File.dirname(obj.key))) 
-              tmp_filename = File.join(dir, obj.key)
-              begin
-                body = obj.get.body.read
-                File.open(tmp_filename, 'wb'){|f| f << body}
-              rescue Aws::S3::Errors::NoSuchKey
-                @errors << obj.key
-              rescue ArgumentError
-                File.open(tmp_filename, 'wb'){|f| f << body.nil? ? '' : body.chars.select(&:valid_encoding?).join}
-              end
+              tmp_filename = download_from_s3(dir, obj)
               download_filename = "https://#{@s3_bucket}.s3.amazonaws.com/" + obj.key
 
               # is this file an archive that contains a bunch of documents we should index separately?
@@ -274,11 +305,11 @@ module Stevedore
               puts resp.inspect if resp && resp["errors"]
             rescue Manticore::Timeout, Manticore::SocketException
               output_stream.puts("retrying at #{Time.now}")
-              if retry_count < 10
+              if retry_count < 3
                 retry_count += 1              
                 retry
               else
-                @errors << filename
+                @errors += slice_of_objs.map &:key
               end 
             end
             output_stream.puts "uploaded #{slice_of_objs.size} files to #{@es_index}; #{docs_so_far} uploaded so far"
@@ -322,7 +353,6 @@ module Stevedore
                 
                 yield doc, filename, content, metadata if block_given?
                 # FileUtils.rm(constituent_file) rescue Errno::ENOENT # try to delete, but no biggie if it doesn't work for some weird reason.
-                puts doc.inspect
                 doc
               end
             else
@@ -340,11 +370,12 @@ module Stevedore
             output_stream.puts "Upload error: #{e} #{e.message}."
             output_stream.puts e.backtrace.join("\n") + "\n\n\n"
             output_stream.puts("retrying at #{Time.now}")
-            if retry_count < 10
-              retry_count += 1              
+            if retry_count < 3
+              retry_count += 1 
+              sleep 30             
               retry
             else
-              @errors << filename
+              @errors << slice_of_files
             end 
           end
           output_stream.puts "uploaded #{slice_of_files.size} files to #{@es_index}; #{docs_so_far} uploaded so far"
