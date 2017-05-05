@@ -19,7 +19,7 @@ module Stevedore
       t.message_from = metadata["Message-From"]
       t.message_cc = metadata["Message-Cc"]
       t.title = t.subject = metadata["subject"]
-      t.dkim_verified = begin 
+      t.dkim_verified = filepath.end_with?("eml") && begin 
                           DkimVerify::Verification::Verifier.new(open(filepath, 'r'){|f| f.read }).verify!
                         rescue DkimVerify::Verification::DkimError
                           false
