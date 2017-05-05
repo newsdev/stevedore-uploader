@@ -127,7 +127,7 @@ module Stevedore
         return nil
       end
       (Dir["#{pdf_basename}-*.png"] + Dir["#{pdf_basename}.png"]).sort_by{|png| (matchdata = png.match(/-\d+\.png/)).nil? ? 0 : matchdata[0].to_i }.each do |png|
-        ret = system('tesseract', png, png, "pdf", "")
+        ret = system('tesseract', png, png, "pdf", "", "quiet")
         if ret.nil?
           STDERR.puts "No tesseract (or not on path); skipping OCR"
           return nil
