@@ -187,7 +187,7 @@ module Stevedore
       rescue StandardError, java.lang.NoClassDefFoundError, org.apache.tika.exception.TikaException => e
         STDERR.puts e.inspect
         STDERR.puts "#{e} #{e.message}: #{filename}"
-        STDERR.puts e.backtrace.join("\n") + "\n\n\n"
+        STDERR.puts e.backtrace.join("\n") + "\n\n\n" if e.backtrace
         # puts "\n"
         @errors << filename
         nil

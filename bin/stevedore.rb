@@ -12,7 +12,7 @@ if __FILE__ == $0
   options = OpenStruct.new
   options.ocr = true
 
-  op = OptionParser.new("Usage: upload_to_elasticsearch [options] target_(dir_or_csv)") do |opts|
+  op = OptionParser.new("Usage: stevedore [options] target_(dir_or_csv)") do |opts|
     opts.on("-hSERVER:PORT", "--host=SERVER:PORT",
             "The location of the ElasticSearch server") do |host|
       options.host = host

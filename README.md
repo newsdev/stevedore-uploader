@@ -22,7 +22,7 @@ This project is in JRuby, so we can leverage the transformative enterprise stabi
 Command-Line Options
 --------------------
 ````
-Usage: upload_to_elasticsearch [options] target_(dir_or_csv)
+Usage: stevedore [options] target_(dir_or_csv)
     -h, --host=SERVER:PORT           The location of the ElasticSearch server
     -i, --index=NAME                 A name to use for the ES index (defaults to using the directory name)
     -s, --s3path=PATH                The path under your bucket where these files have been uploaded. (defaults to ES index)
@@ -41,23 +41,23 @@ Advanced Usage
 
 upload documents from your local disk
 ```
-bundle exec ruby bin/upload_to_elasticsearch.rb --index=INDEXNAMEx [--host=localhost:9200]  [--s3path=name-of-path-under-bucket] path/to/documents/to/parse
+bundle exec ruby bin/stevedore.rb --index=INDEXNAMEx [--host=localhost:9200]  [--s3path=name-of-path-under-bucket] path/to/documents/to/parse
 ```
 or from s3
 ```
-bundle exec ruby bin/upload_to_elasticsearch.rb --index=INDEXNAMEx [--host=localhost:9200]   s3://my-bucket/path/to/documents/to/parse
+bundle exec ruby bin/stevedore.rb --index=INDEXNAMEx [--host=localhost:9200]   s3://my-bucket/path/to/documents/to/parse
 ```
 
 if host isn't specified, we assume `localhost:9200`.
 
 e.g. 
 ```
-bundle exec ruby bin/upload_to_elasticsearch.rb --index=jrubytest --host=https://stevedore.elasticsearch.yourdomain.net/es/ ~/code/marco-rubios-emails/emls/ 
+bundle exec ruby bin/stevedore.rb --index=jrubytest --host=https://stevedore.elasticsearch.yourdomain.net/es/ ~/code/marco-rubios-emails/emls/ 
 ```
 
 you may also specify an s3:// location of documents to parse, instead of a local directory, e.g.
 ```
-bundle exec ruby bin/upload_to_elasticsearch.rb --index=jrubytest --host=https://stevedore.elasticsearch.yourdomain.net/es/ s3://int-data-dumps/marco-rubio-fire-drill
+bundle exec ruby bin/stevedore.rb --index=jrubytest --host=https://stevedore.elasticsearch.yourdomain.net/es/ s3://int-data-dumps/marco-rubio-fire-drill
 ```
 if you choose to process documents from S3, you should upload those documents using your choice of tool -- but `awscli` is a good choice. *Stevedore-Uploader does NOT upload documents to S3 on your behalf.
 
