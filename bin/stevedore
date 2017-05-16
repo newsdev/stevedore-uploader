@@ -104,7 +104,7 @@ else
 end
 puts "Finished uploading documents at #{Time.now}"
 
-puts "Created Stevedore for #{ES_INDEX}; go check out https://stevedore.newsdev.net/search/#{ES_INDEX} or http://stevedore.adm.prd.newsdev.nytimes.com/search/#{ES_INDEX}"  
+puts "Created Stevedore for #{ES_INDEX}; go check out https://localhost:9293/#{ES_INDEX} or whatever your host might be..."  
 if f.errors.size > 0  
   STDERR.puts "#{f.errors.size} failed documents:"
   STDERR.puts f.errors.inspect 
