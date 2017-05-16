@@ -20,5 +20,5 @@ Gem::Specification.new do |s|
   s.add_dependency("rubyzip", "~> 1.1")
   s.add_dependency("humanhash", "~> 0.1.0")
   s.add_dependency("dkimverify", "~> 0.0.8")
-  s.executables = ["stevedore"]
+  s.executables << "stevedore"
 end
