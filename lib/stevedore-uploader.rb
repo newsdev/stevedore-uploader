@@ -1,6 +1,6 @@
 
 require 'rika'
-require 'jruby-openssl'
+require 'openssl'
 require 'net/https'
 require 'elasticsearch'
 require 'elasticsearch/transport/transport/http/manticore'

@@ -6,67 +6,65 @@ raise Exception, "You've gotta use Java 1.8; you're on #{java.lang.System.getPro
 
 require "#{File.expand_path(File.dirname(__FILE__))}/../lib/stevedore-uploader.rb"
 
-if __FILE__ == $0
-  require 'optparse'
-  require 'ostruct'
-  options = OpenStruct.new
-  options.ocr = true
+require 'optparse'
+require 'ostruct'
+options = OpenStruct.new
+options.ocr = true
 
-  op = OptionParser.new("Usage: stevedore [options] target_(dir_or_csv)") do |opts|
-    opts.on("-hSERVER:PORT", "--host=SERVER:PORT",
-            "The location of the ElasticSearch server") do |host|
-      options.host = host
-    end
-
-    opts.on("-iNAME", "--index=NAME",
-            "A name to use for the ES index (defaults to using the directory name)") do |index|
-      options.index = index
-    end
-
-    opts.on("-sPATH", "--s3path=PATH",
-            "The path under your bucket where these files have been uploaded. (defaults to ES index)"
-      ) do |s3path|
-      options.s3path = s3path
-    end
-    opts.on("-bPATH", "--s3bucket=PATH",
-            "The s3 bucket where these files have already been be uploaded (or will be later)."
-      ) do |s3bucket|
-      options.s3bucket = s3bucket
-    end
-
-    opts.on("--title-column=COLNAME",
-            "If target file is a CSV, which column contains the title of the row. Integer index or string column name."
-      ) do |title_column|
-      options.title_column = title_column
-    end
-    opts.on("--text-column=COLNAME",
-            "If target file is a CSV, which column contains the main, searchable of the row. Integer index or string column name."
-      ) do |text_column|
-      options.text_column = text_column
-    end
-    opts.on("--slice-size=SLICE",
-            "Process documents in batches of SLICE. Default is 100. Lower this if you get timeouts. Raise it to go faster."
-      ) do |slice_size|
-      options.slice_size = slice_size.to_i
-    end
-
-    opts.on("-o", "--[no-]ocr", "don't attempt to OCR any PDFs, even if they contain no text") do |v|
-      options.ocr = v 
-    end
-
-    opts.on( '-?', '--help', 'Display this screen' ) do     
-      puts opts
-      exit
-    end
+op = OptionParser.new("Usage: stevedore [options] target_(dir_or_csv)") do |opts|
+  opts.on("-hSERVER:PORT", "--host=SERVER:PORT",
+          "The location of the ElasticSearch server") do |host|
+    options.host = host
   end
 
-  op.parse!
+  opts.on("-iNAME", "--index=NAME",
+          "A name to use for the ES index (defaults to using the directory name)") do |index|
+    options.index = index
+  end
 
-  # to delete an index: curl -X DELETE localhost:9200/indexname/
-  unless ARGV.length == 1
-    puts op
+  opts.on("-sPATH", "--s3path=PATH",
+          "The path under your bucket where these files have been uploaded. (defaults to ES index)"
+    ) do |s3path|
+    options.s3path = s3path
+  end
+  opts.on("-bPATH", "--s3bucket=PATH",
+          "The s3 bucket where these files have already been be uploaded (or will be later)."
+    ) do |s3bucket|
+    options.s3bucket = s3bucket
+  end
+
+  opts.on("--title-column=COLNAME",
+          "If target file is a CSV, which column contains the title of the row. Integer index or string column name."
+    ) do |title_column|
+    options.title_column = title_column
+  end
+  opts.on("--text-column=COLNAME",
+          "If target file is a CSV, which column contains the main, searchable of the row. Integer index or string column name."
+    ) do |text_column|
+    options.text_column = text_column
+  end
+  opts.on("--slice-size=SLICE",
+          "Process documents in batches of SLICE. Default is 100. Lower this if you get timeouts. Raise it to go faster."
+    ) do |slice_size|
+    options.slice_size = slice_size.to_i
+  end
+
+  opts.on("-o", "--[no-]ocr", "don't attempt to OCR any PDFs, even if they contain no text") do |v|
+    options.ocr = v 
+  end
+
+  opts.on( '-?', '--help', 'Display this screen' ) do     
+    puts opts
     exit
   end
+end
+
+op.parse!
+
+# to delete an index: curl -X DELETE localhost:9200/indexname/
+unless ARGV.length == 1
+  puts op
+  exit
 end
 
 # you can provide either a path to files locally or
@@ -93,28 +91,22 @@ S3_BASEPATH = "https://#{S3_BUCKET}.s3.amazonaws.com/#{S3_PATH}"
 raise ArgumentError, "specify a destination" unless FOLDER
 raise ArgumentError, "specify the elasticsearch host" unless ES_HOST
 
-###############################
-# actual stuff
-###############################
+f = Stevedore::ESUploader.new(ES_HOST, ES_INDEX, S3_BUCKET, S3_BASEPATH)
+f.should_ocr = options.ocr
+puts "Will not OCR, per --no-ocr option" unless f.should_ocr  
+f.slice_size = options.slice_size if options.slice_size
+puts "Slice size set to #{f.slice_size}" if options.slice_size  
 
-if __FILE__ == $0
-  f = Stevedore::ESUploader.new(ES_HOST, ES_INDEX, S3_BUCKET, S3_BASEPATH)
-  f.should_ocr = options.ocr
-  puts "Will not OCR, per --no-ocr option" unless f.should_ocr  
-  f.slice_size = options.slice_size if options.slice_size
-  puts "Slice size set to #{f.slice_size}" if options.slice_size  
+if FOLDER.match(/\.[ct]sv$/)
+  f.do_csv!(FOLDER, File.join(f.s3_basepath, File.basename(FOLDER)), options.title_column, options.text_column)
+else
+  f.do!(FOLDER)
+end
+puts "Finished uploading documents at #{Time.now}"
 
-  if FOLDER.match(/\.[ct]sv$/)
-    f.do_csv!(FOLDER, File.join(f.s3_basepath, File.basename(FOLDER)), options.title_column, options.text_column)
-  else
-    f.do!(FOLDER)
-  end
-  puts "Finished uploading documents at #{Time.now}"
-
-  puts "Created Stevedore for #{ES_INDEX}; go check out https://stevedore.newsdev.net/search/#{ES_INDEX} or http://stevedore.adm.prd.newsdev.nytimes.com/search/#{ES_INDEX}"  
-  if f.errors.size > 0  
-    STDERR.puts "#{f.errors.size} failed documents:"
-    STDERR.puts f.errors.inspect 
-    puts "Uploading successful, but with #{f.errors.size} errors."
-  end
+puts "Created Stevedore for #{ES_INDEX}; go check out https://stevedore.newsdev.net/search/#{ES_INDEX} or http://stevedore.adm.prd.newsdev.nytimes.com/search/#{ES_INDEX}"  
+if f.errors.size > 0  
+  STDERR.puts "#{f.errors.size} failed documents:"
+  STDERR.puts f.errors.inspect 
+  puts "Uploading successful, but with #{f.errors.size} errors."
 end
