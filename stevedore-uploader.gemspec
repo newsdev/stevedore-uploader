@@ -7,7 +7,7 @@ Gem::Specification.new do |s|
   s.platform    = "java"
   s.authors     = ["Jeremy B. Merrill"]
   s.email       = 'jeremy.merrill@nytimes.com'
-  s.files       = ["bin/stevedore.rb", "README.md"] +  Dir['lib/**/*']
+  s.files       = ["bin/stevedore", "README.md"] +  Dir['lib/**/*']
   s.homepage    = 'https://github.com/newsdev/stevedore-uploader'
   s.add_dependency("elasticsearch", "~> 1.0")
   s.add_dependency("manticore", "0.6.0")
