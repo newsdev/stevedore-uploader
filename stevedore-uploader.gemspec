@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name        = 'stevedore-uploader'
-  s.version     = '1.0.14'
+  s.version     = '1.0.15'
   s.licenses    = ['MIT']
   s.summary     = "Upload documents to a Stevedore search engine."
   s.description = "TK"
