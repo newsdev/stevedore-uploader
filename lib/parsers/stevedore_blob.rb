@@ -17,7 +17,9 @@ module Stevedore
     end 
 
     def self.new_from_tika(content, metadata, download_url, filename)
-      self.new( ((metadata["title"] && metadata["title"] != "Untitled") ? metadata["title"] : File.basename(filename)), content, download_url)
+      z = self.new((metadata["title"] && metadata["title"] != "Untitled") ? metadata["title"] : File.basename(filename), content, download_url)
+      z.extra = metadata
+      z
     end
 
     def analyze!

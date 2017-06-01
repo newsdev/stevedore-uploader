@@ -102,11 +102,11 @@ module Stevedore
         begin
           resp = @client.bulk body: data.map{|datum| {index: {_index: @es_index, _type: type || 'doc', data: datum }} }
           puts resp if resp[:errors]
-        rescue JSON::GeneratorError, Elasticsearch::Transport::Transport::Errors::InternalServerError
+        rescue JSON::GeneratorError, Elasticsearch::Transport::Transport::Errors::InternalServerError, Manticore::Timeout, Manticore::SocketException
           data.each do |datum|
             begin
               @client.bulk body: [datum].map{|datum| {index: {_index: @es_index, _type: type || 'doc', data: datum }} } unless datum.nil?
-            rescue JSON::GeneratorError, Elasticsearch::Transport::Transport::Errors::InternalServerError
+            rescue JSON::GeneratorError, Elasticsearch::Transport::Transport::Errors::InternalServerError, Manticore::Timeout, Manticore::SocketException
               next
             end
           end
@@ -263,7 +263,7 @@ module Stevedore
           bucket.objects(:prefix => s3_path_without_bucket).each_slice(@slice_size) do |slice_of_objs|
             docs_so_far += slice_of_objs.size
             output_stream.puts "starting a set of #{@slice_size} -- so far #{docs_so_far}"
-            slice_of_objs.map! do |obj|
+            docs = slice_of_objs.map! do |obj|
               next if obj.key[-1] == "/"
               FileUtils.mkdir_p(File.join(dir, File.dirname(obj.key))) 
               tmp_filename = download_from_s3(dir, obj)
@@ -301,7 +301,7 @@ module Stevedore
             end
             retry_count = 0             
             begin
-              resp = bulk_upload_to_es!(slice_of_objs.compact.flatten(1).reject(&:empty?)) # flatten, in case there's an archive
+              resp = bulk_upload_to_es!(docs.compact.flatten(1).compact.reject(&:empty?)) # flatten, in case there's an archive
               puts resp.inspect if resp && resp["errors"]
             rescue Manticore::Timeout, Manticore::SocketException
               output_stream.puts("retrying at #{Time.now}")
