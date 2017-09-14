@@ -76,8 +76,8 @@ module Stevedore
           "metadata" => {
             "Content-Type" => content_type || "message/rfc822",
             "Creation-Date" => creation_date,
-            "Message-To" => message_from.is_a?(Enumerable) ? message_from : [ message_from ],
-            "Message-From" => message_to.is_a?(Enumerable) ? message_to : [ message_to ],
+            "Message-To" => message_from.is_a?(Enumerable) ? message_to : [ message_to ],
+            "Message-From" => message_from.is_a?(Enumerable) ? message_from : [ message_from ],
             "Message-Cc" => message_cc.is_a?(Enumerable) ? message_cc : [ message_cc ],
             "subject" => subject,
             "attachments" => attachments,
