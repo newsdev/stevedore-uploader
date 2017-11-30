@@ -21,7 +21,7 @@ module Stevedore
       t.title = t.subject = metadata["subject"]
       t.dkim_verified = filepath.end_with?("eml") && begin 
                           DkimVerify::Verification::Verifier.new(open(filepath, 'r'){|f| f.read }).verify!
-                        rescue DkimVerify::Verification::DkimError
+                        rescue DkimVerify::Verification::DkimError, DkimVerify::Mail::MessageFormatError
                           false
                         end
       t.attachments = metadata["X-Attachments"].to_s.split("|").map do |raw_attachment_filename| 
