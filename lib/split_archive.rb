@@ -64,46 +64,60 @@ module Stevedore
         memo
       end
       Enumerator.new do |yielder|
+
+
         folders.each do |folder_name, folder|
-          while mail = folder.getNextChild
+          begin
+            while mail = folder.getNextChild
 
-            eml_str = mail.get_transport_message_headers + mail.get_body
+              # TODO: there exist some objects called EnterpriseVault Shortcuts in some PSTs
+              # PSTFile doesn't know how to parse them and will complain:
+              # Unknown message type: IPM.Note.EnterpriseVault.Shortcut
+              # in practice, the body gets extracted, but not any headers (incl. To/From/Subj)
+              # or attachments.
+              # if we detect one of these EnterpriseVault Shortcuts objects
+              # we'll create "fake" EML headers for it, to make a fake EML
 
-            yielder << ["#{idx}.eml", lambda{|fn| open(fn, 'wb'){|fh| fh << eml_str } }]
-            attachment_count = mail.get_number_of_attachments
-            attachment_count.times do |attachment_idx|
-              attachment = mail.get_attachment(attachment_idx)
-              attachment_filename = attachment.get_filename
-              yielder << ["#{idx}-#{attachment_filename}", lambda {|fn| open(fn, 'wb'){ |fh| fh << attachment.get_file_input_stream.to_io.read }}]
+              headers = mail.get_transport_message_headers
+              if mail.get_transport_message_headers.strip.empty?
+                # mail.java_send(:getItems).to_a.each{|f| puts f.inspect }
+                subject = mail.java_send :getSubject
+                recip = '"' + mail.get_string_item(0x0E04).split(";").join('"; "') + '"'
+                sender = mail.get_string_item(0x5D01)
+                time = begin 
+                        DateTime.parse(mail.get_date_item(0x3007).to_s.strip).strftime("%a, %d %b %Y %H:%M:%S %z")
+                       rescue
+                         nil
+                       end
+                headers = ["Received: fake", "Subject: #{subject}", "To: #{recip}", "From: #{sender}", time.nil? ? nil : "Date: #{time}"].compact.join("\n") + "\n\n"
+              end
+
+              # creating a simple EML version of the email, so Tika can read it (in the next step, in stevedore-uploader.rb)
+              eml_str = headers + mail.get_body
+
+
+              # first we handle and yield the attachments
+              # then yield the containing EML
+              # so that we can yield a list of the filenames of the attachments along with the containing EML
+              attachment_basenames = []
+              attachment_count = mail.get_number_of_attachments
+              attachment_count.times do |attachment_idx|
+                attachment = mail.get_attachment(attachment_idx)
+                attachment_filename = attachment.get_filename
+                begin
+                  attachment_basenames << "#{idx}-#{attachment_filename}"
+                  yielder << ["#{idx}-#{attachment_filename}", lambda {|fn| open(fn, 'wb'){ |fh| fh << attachment.get_file_input_stream.to_io.read }}]
+                rescue java.lang.NullPointerException,java.lang.ArrayIndexOutOfBoundsException
+                  next
+                end
+              end
+              yielder << ["#{idx}.eml", lambda{|fn| open(fn, 'wb'){|fh| fh << eml_str } }, attachment_basenames]
+              idx += 1
             end
-            idx += 1
-          end
-        end
-      end
-    end
 
-
-    def self.split_pst(archive_filename)
-      pstfile = Java::ComPFF::PSTFile.new(archive_filename)
-      idx = 0
-      folders = pstfile.root.sub_folders.inject({}) do |memo,f|
-        memo[f.name] = f
-        memo
-      end
-      Enumerator.new do |yielder|
-        folders.each do |folder_name, folder|
-          while mail = folder.getNextChild
-
-            eml_str = mail.get_transport_message_headers + mail.get_body
-
-            yielder << ["#{idx}.eml", lambda{|fn| open(fn, 'wb'){|fh| fh << eml_str } }]
-            attachment_count = mail.get_number_of_attachments
-            attachment_count.times do |attachment_idx|
-              attachment = mail.get_attachment(attachment_idx)
-              attachment_filename = attachment.get_filename
-              yielder << ["#{idx}-#{attachment_filename}", lambda {|fn| open(fn, 'wb'){ |fh| fh << attachment.get_file_input_stream.to_io.read }}]
-            end
-            idx += 1
+          rescue java.lang.ArrayIndexOutOfBoundsException => e
+            # I think it's just the end of hte folder
+            next
           end
         end
       end
