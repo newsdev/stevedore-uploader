@@ -95,6 +95,7 @@ module Stevedore
     end
 
     def bulk_upload_to_es!(data, type=:doc)
+      puts "uploading..."
       return nil if data.compact.empty? 
       if data.size == 1
         resp = @client.index  index: @es_index, type: type, id: data.first["_id"], body: data.first
@@ -158,7 +159,6 @@ module Stevedore
           puts "skipping #{filename} for being too big"
           return nil
         end
-
         # TODO: factor these out in favor of the yield/block situation down below.
         # this should (eventually) be totally generic, but perhaps handle common 
         # document types on its own
@@ -183,7 +183,7 @@ module Stevedore
               else
                 ::Stevedore::StevedoreBlob.new_from_tika(content, metadata, download_url, filename).to_hash
               end
-      [doc, content, metadata]
+        [doc, content, metadata]
       rescue StandardError, java.lang.NoClassDefFoundError, org.apache.tika.exception.TikaException => e
         STDERR.puts e.inspect
         STDERR.puts "#{e} #{e.message}: #{filename}"
@@ -275,23 +275,47 @@ module Stevedore
               # but, for now, standalone emails are treated as one document
               # PDFs can (theoretically) contain documents as "attachments" -- those aren't handled here either.x
               if ArchiveSplitter::HANDLED_FORMATS.include?(tmp_filename.split(".")[-1]) 
-                ArchiveSplitter.split(tmp_filename).map do |constituent_file, constituent_basename, attachment_basenames, parent_basename|
-                  doc, content, metadata = process_document(constituent_file, download_filename)
-                  next nil if doc.nil?
-                  doc["analyzed"] ||= {}
-                  doc["analyzed"]["metadata"] ||= {}
+                ArchiveSplitter.split(tmp_filename).each_slice(@slice_size).map do |slice_of_archived_files|
+                  docs = slice_of_archived_files.map do |constituent_file, constituent_basename, attachment_basenames, parent_basename|
 
-                  # this is a hack: but we're replicating how IDs are calculated (in parsers/stevedore_blob.rb) to make "attachments" the list of IDs of all documents in the archive
-                  # we have to set separate sha1s for these, because they're by default based only on the download URL (which is the same for all of the constituent files)
-                  doc["analyzed"]["metadata"]["attachments"] = (parent_basename.nil? ? [] : [Digest::SHA1.hexdigest(download_filename + parent_basename)]) + attachment_basenames.map{|attachment| Digest::SHA1.hexdigest(download_filename + attachment) } # is a list of filenames
-                  doc["sha1"] = Digest::SHA1.hexdigest(download_filename + File.basename(constituent_basename)) # since these files all share a download URL (that of the archive, we need to come up with a custom sha1)
-                  doc["id"] = doc["sha1"]
-                  doc["_id"] = doc["sha1"]
-                  yield doc, obj.key, content, metadata if block_given?
-                  FileUtils.rm(constituent_file) rescue Errno::ENOENT # try to delete, but no biggie if it doesn't work for some weird reason.
-                  doc["file"]["title"] ||= "Untitled Document: #{HumanHash::HumanHasher.new.humanize(doc["_id"])}"
-                  doc
-                end
+
+                    doc, content, metadata = process_document(constituent_file, download_filename)
+                    next nil if doc.nil?
+                    doc["analyzed"] ||= {}
+                    doc["analyzed"]["metadata"] ||= {}
+
+                    # this is a hack: but we're replicating how IDs are calculated (in parsers/stevedore_blob.rb) to make "attachments" the list of IDs of all documents in the archive
+                    # we have to set separate sha1s for these, because they're by default based only on the download URL (which is the same for all of the constituent files)
+                    doc["analyzed"]["metadata"]["attachments"] = (parent_basename.nil? ? [] : [Digest::SHA1.hexdigest(download_filename + parent_basename)]) + attachment_basenames.map{|attachment| Digest::SHA1.hexdigest(download_filename + attachment) } # is a list of filenames
+                    doc["sha1"] = Digest::SHA1.hexdigest(download_filename + File.basename(constituent_basename)) # since these files all share a download URL (that of the archive, we need to come up with a custom sha1)
+                    doc["id"] = doc["sha1"]
+                    doc["_id"] = doc["sha1"]
+                    yield doc, obj.key, content, metadata if block_given?
+                    FileUtils.rm(constituent_file) rescue Errno::ENOENT # try to delete, but no biggie if it doesn't work for some weird reason.
+                    doc["file"]["title"] ||= "Untitled Document: #{HumanHash::HumanHasher.new.humanize(doc["_id"])}"
+                    doc
+                  end
+
+                  retry_count = 0
+                  begin
+                    resp = bulk_upload_to_es!(docs.compact.flatten(1)) # flatten, in case there's an archive
+                    puts resp.inspect if resp && resp["errors"]
+                  rescue Manticore::Timeout, Manticore::SocketException => e
+                    output_stream.puts e.inspect
+                    output_stream.puts "Upload error: #{e} #{e.message}."
+                    output_stream.puts e.backtrace.join("\n") + "\n\n\n"
+                    output_stream.puts("retrying at #{Time.now}")
+                    if retry_count < 3
+                      retry_count += 1 
+                      sleep 30             
+                      retry
+                    else
+                      @errors << slice_of_archived_files
+                    end 
+                  end
+                  docs
+                end.flatten
+                
               else 
                 doc, content, metadata = process_document(tmp_filename, download_filename)
                 yield doc, obj.key, content, metadata if block_given?
@@ -338,23 +362,45 @@ module Stevedore
             # but, for now, standalone emails are treated as one document
             # PDFs can (theoretically) contain documents as "attachments" -- those aren't handled here either.
             if ArchiveSplitter::HANDLED_FORMATS.include?(filename.split(".")[-1]) 
-                ArchiveSplitter.split(filename).map do |constituent_file, constituent_basename, attachment_basenames, parent_basename|
-                doc, content, metadata = process_document(constituent_file, download_filename)
-                next nil if doc.nil?
-                doc["analyzed"] ||= {}
-                doc["analyzed"]["metadata"] ||= {}
-                
-                # this is a hack: but we're replicating how IDs are calculated (in parsers/stevedore_blob.rb) to make "attachments" the list of IDs of all documents in the archive
-                # we have to set separate sha1s for these, because they're by default based only on the download URL (which is the same for all of the constituent files)
-                doc["analyzed"]["metadata"]["attachments"] = (parent_basename.nil? ? [] : [Digest::SHA1.hexdigest(download_filename + parent_basename)]) + attachment_basenames.map{|attachment| Digest::SHA1.hexdigest(download_filename + attachment) } # is a list of filenames
-                doc["sha1"] = Digest::SHA1.hexdigest(download_filename + File.basename(constituent_basename)) # since these files all share a download URL (that of the archive, we need to come up with a custom sha1)
-                doc["id"] = doc["sha1"]
-                doc["_id"] = doc["sha1"]
-                
-                yield doc, filename, content, metadata if block_given?
-                # FileUtils.rm(constituent_file) rescue Errno::ENOENT # try to delete, but no biggie if it doesn't work for some weird reason.
-                doc
-              end
+              ArchiveSplitter.split(filename).each_slice(@slice_size).map do |slice_of_archived_files|
+                docs = slice_of_archived_files.map do |constituent_file, constituent_basename, attachment_basenames, parent_basename|
+                  doc, content, metadata = process_document(constituent_file, download_filename)
+                  next nil if doc.nil?
+                  doc["analyzed"] ||= {}
+                  doc["analyzed"]["metadata"] ||= {}
+                  
+                  # this is a hack: but we're replicating how IDs are calculated (in parsers/stevedore_blob.rb) to make "attachments" the list of IDs of all documents in the archive
+                  # we have to set separate sha1s for these, because they're by default based only on the download URL (which is the same for all of the constituent files)
+                  doc["analyzed"]["metadata"]["attachments"] = (parent_basename.nil? ? [] : [Digest::SHA1.hexdigest(download_filename + parent_basename)]) + attachment_basenames.map{|attachment| Digest::SHA1.hexdigest(download_filename + attachment) } # is a list of filenames
+                  doc["sha1"] = Digest::SHA1.hexdigest(download_filename + File.basename(constituent_basename)) # since these files all share a download URL (that of the archive, we need to come up with a custom sha1)
+                  doc["id"] = doc["sha1"]
+                  doc["_id"] = doc["sha1"]
+                  
+                  yield doc, filename, content, metadata if block_given?
+                  # FileUtils.rm(constituent_file) rescue Errno::ENOENT # try to delete, but no biggie if it doesn't work for some weird reason.
+                  doc
+                end
+
+                retry_count = 0
+                begin
+                  resp = bulk_upload_to_es!(docs.compact.flatten(1)) # flatten, in case there's an archive
+                  puts resp.inspect if resp && resp["errors"]
+                rescue Manticore::Timeout, Manticore::SocketException => e
+                  output_stream.puts e.inspect
+                  output_stream.puts "Upload error: #{e} #{e.message}."
+                  output_stream.puts e.backtrace.join("\n") + "\n\n\n"
+                  output_stream.puts("retrying at #{Time.now}")
+                  if retry_count < 3
+                    retry_count += 1 
+                    sleep 30             
+                    retry
+                  else
+                    @errors << slice_of_archived_files
+                  end 
+                end
+
+                docs
+              end.flatten
             else
               doc, content, metadata = process_document(filename, download_filename  )
               yield doc, filename, content, metadata if block_given?
