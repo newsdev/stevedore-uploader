@@ -70,7 +70,9 @@ module Stevedore
           begin
             while mail = folder.getNextChild
 
-              # TODO: there exist some objects called EnterpriseVault Shortcuts in some PSTs
+              headers = mail.get_transport_message_headers
+
+              # there exist some objects called EnterpriseVault Shortcuts in some PSTs
               # PSTFile doesn't know how to parse them and will complain:
               # Unknown message type: IPM.Note.EnterpriseVault.Shortcut
               # in practice, the body gets extracted, but not any headers (incl. To/From/Subj)
@@ -78,7 +80,6 @@ module Stevedore
               # if we detect one of these EnterpriseVault Shortcuts objects
               # we'll create "fake" EML headers for it, to make a fake EML
 
-              headers = mail.get_transport_message_headers
               if mail.get_transport_message_headers.strip.empty?
                 # mail.java_send(:getItems).to_a.each{|f| puts f.inspect }
                 subject = mail.java_send :getSubject
@@ -89,10 +90,25 @@ module Stevedore
                        rescue
                          nil
                        end
-                headers = ["Received: fake", "Subject: #{subject}", "To: #{recip}", "From: #{sender}", time.nil? ? nil : "Date: #{time}"].compact.join("\n") + "\n\n"
+                headers = ["Received: fake", "Subject: #{subject}", "To: #{recip}", "From: #{sender}", time.nil? ? nil : "Date: #{time}"].compact.join("\n") + "\n\n"              
+              else 
+                headers = headers.gsub("\r\n", "\n").strip + "\n\n"
+                # for whatever reason, headers like 
+                # Content-Type: multipart/related;
+                # boundary="_009_SN1PR09MB1103444660BD4EAD8142FF94D3250SN1PR09MB1103namp_";
+                # type="multipart/alternative"
+                # cause a LOT of trouble (i.e. empty bodies).
+                # we have two options to fix, to get valid rfc822 docs:
+                # 1. either add the boundary (preceded by two hyphens)
+                # 2. or get rid of the header entirely...
+                # Here I've chosen the first option.
+                match_obj = headers.match(/boundary="(.+)"/)
+                if match_obj
+                  boundary = match_obj[1]
+                  headers = headers + "\n--#{boundary}\n"
+                end
               end
 
-              # creating a simple EML version of the email, so Tika can read it (in the next step, in stevedore-uploader.rb)
               eml_str = headers + mail.get_body
 
 
