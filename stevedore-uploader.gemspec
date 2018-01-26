@@ -11,10 +11,10 @@ Gem::Specification.new do |s|
   s.homepage    = 'https://github.com/newsdev/stevedore-uploader'
   s.add_dependency("elasticsearch", "~> 1.0")
   s.add_dependency("manticore", "0.6.0")
-  s.add_dependency("jruby-openssl", "~> 0.9.17")  
-  s.add_dependency("aws-sdk", "~> 2")  
+  s.add_dependency("jruby-openssl", "~> 0.9.17")
+  s.add_dependency("aws-sdk", "~> 2")
   s.add_dependency("rika-stevedore", "~> 1.7.4")
-  s.add_dependency("nokogiri", "~> 1.6")
+  s.add_dependency("nokogiri", "~> 1.8.1")
   s.add_dependency("pst", "~> 0.0.2")
   s.add_dependency("mail", "~> 2.6")
   s.add_dependency("rubyzip", "~> 1.1")
